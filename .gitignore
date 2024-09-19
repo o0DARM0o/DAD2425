@@ -1,3 +1,4 @@
 target/
 contract/*.xml
+init_app.sh
 .vscode
