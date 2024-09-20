@@ -4,7 +4,8 @@ import dadkvs.util.DebugMode;
 
 public class DadkvsServerState {
     boolean        i_am_leader;
-    DebugMode      debug_mode;
+	DebugMode      old_debug_mode;
+    DebugMode      new_debug_mode;
     int            base_port;
     int            my_id;
     int            store_size;
@@ -17,7 +18,8 @@ public class DadkvsServerState {
 	base_port = port;
 	my_id = myself;
 	i_am_leader = false;
-	debug_mode = null;
+	old_debug_mode = null;
+	new_debug_mode = null;
 	store_size = kv_size;
 	store = new KeyValueStore(kv_size);
 	main_loop = new MainLoop(this);

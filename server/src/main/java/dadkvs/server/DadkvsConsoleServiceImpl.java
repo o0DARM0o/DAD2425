@@ -46,7 +46,7 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 	// Get debug mode
 	try {
 		DebugMode debugMode = DebugMode.values()[DebugModeIndex];
-		this.server_state.debug_mode = debugMode;
+		this.server_state.new_debug_mode = debugMode;
 		response_value = true;
 		// for debug purposes
 		System.out.println(DebugMode.CRASH.ordinal());
@@ -57,7 +57,7 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 	this.server_state.main_loop.wakeup();
 
 	// for debug purposes
-	System.out.println("Setting debug mode to = " + this.server_state.debug_mode);
+	System.out.println("Setting debug mode to = " + this.server_state.new_debug_mode);
 
 	DadkvsConsole.SetDebugReply response =DadkvsConsole.SetDebugReply.newBuilder()
 	    .setAck(response_value).build();

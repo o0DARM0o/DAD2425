@@ -255,6 +255,23 @@ public class DadkvsConsoleClient {
 	scanner.close();
     }
 
+	/**
+	 * Parses the input string to determine the mode as an integer value.
+	 * <p>
+	 * This method attempts to parse the provided string as an integer. If the string
+	 * cannot be parsed into an integer (e.g., it's not a valid number), it tries to
+	 * match it to a {@link DebugMode} enum value. If successful, it returns the ordinal
+	 * (index) of the matched enum. If neither parsing nor matching succeeds, it throws
+	 * a {@link NumberFormatException}.
+	 * </p>
+	 * 
+	 * @param modeString The input string representing the mode. It can either be a valid
+	 *                   integer string or a string representing a {@link DebugMode} enum.
+	 * @return The parsed integer value of the mode or the ordinal of the corresponding
+	 *         {@link DebugMode} enum.
+	 * @throws NumberFormatException If the input string is neither a valid integer nor a
+	 *                               valid {@link DebugMode} string.
+	 */
 	private static int parseMode(String modeString) throws NumberFormatException {
 		int modeInt = -1;
 		try {
