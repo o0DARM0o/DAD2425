@@ -1,14 +1,26 @@
 package dadkvs.util;
 
+import io.grpc.ServerCredentials;
+
 /**
  * Enum representing various debug modes for the application.
  */
 public enum DebugMode {
-	CRASH,
+	CRASH {
+		@Override
+        public  void executeDebugMode() {
+			System.out.println("Server crashed!");
+            System.exit(0);
+        }
+	},
 	FREEZE,
 	UN_FREEZE,
 	SLOW_MODE_ON,
 	SLOW_MODE_OFF;
+
+	public void executeDebugMode() {
+		System.out.println("executeMode not implemented for " + "\"" + this + "\"");
+	}
 
 	/**
 	 * Converts a string representation of a debug mode to the corresponding {@link DebugMode} enum.
@@ -34,4 +46,6 @@ public enum DebugMode {
 		}
 		return debugMode;
 	}
+
+
 }

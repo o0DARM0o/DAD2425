@@ -10,7 +10,7 @@ import dadkvs.DadkvsPaxosServiceGrpc;
 
 import dadkvs.util.GenericResponseCollector;
 import dadkvs.util.CollectorStreamObserver;
-
+import dadkvs.util.DebugMode;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 
@@ -27,14 +27,18 @@ public class MainLoop implements Runnable  {
     }
 
     public void run() {
-	while (true) 
-	    this.doWork();
+	while (true)
+		this.doWork();
     }
    
     
     
     synchronized public void doWork() {
 	System.out.println("Main loop do work start");
+	if (server_state.new_debug_mode != server_state.old_debug_mode) {
+		server_state.new_debug_mode.executeDebugMode();
+		server_state.old_debug_mode = server_state.new_debug_mode;
+	}
 	this.has_work = false;
 	while (this.has_work == false) {
 	    System.out.println("Main loop do work: waiting");
@@ -42,6 +46,7 @@ public class MainLoop implements Runnable  {
 		wait ();
 	    }
 	    catch (InterruptedException e) {
+			System.out.println("Heyy");
 	    }
 	}
 	System.out.println("Main loop do work finish");
@@ -51,4 +56,6 @@ public class MainLoop implements Runnable  {
 	this.has_work = true;
 	notify();    
     }
+
+
 }
