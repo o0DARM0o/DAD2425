@@ -15,6 +15,8 @@ import dadkvs.DadkvsMainServiceGrpc;
 
 import dadkvs.util.GenericResponseCollector;
 import dadkvs.util.CollectorStreamObserver;
+import dadkvs.util.DebugMode;
+
 import java.util.Scanner;
 
 import io.grpc.ManagedChannel;
@@ -22,7 +24,7 @@ import io.grpc.ManagedChannelBuilder;
 
 public class DadkvsConsoleClient {
 
-    public static void main(String[] args) throws Exception {
+	public static void main(String[] args) throws Exception {
 	int n_servers = 5;
 	int replica = 0;
 	int mode = 0;
@@ -133,7 +135,7 @@ public class DadkvsConsoleClient {
 		    System.out.println("debug " + parameter1 + " " + parameter2);
                     if ((parameter1 != null) && (parameter2 != null)) {
 			try {
-			    mode  =  Integer.parseInt(parameter1);
+			    mode  =  parseMode(parameter1);
 			    replica =  Integer.parseInt(parameter2);
 			    System.out.println("setting debug with mode " + mode + " on replica " + replica);
 
@@ -153,10 +155,10 @@ public class DadkvsConsoleClient {
 			    else
 				System.out.println("no reply received");
 			} catch (NumberFormatException e) {
-                           System.out.println("usage: leader on/off replica");
+                           System.out.println("usage: debug crash/freeze/un-freeze/slow-mode-on/slow-mode-off replica");
                         }
                     } else {
-                        System.out.println("usage: leader on/off replica");
+                        System.out.println("usage: debug crash/freeze/un-freeze/slow-mode-on/slow-mode-off replica");
                     }
                     break;
              case "reconfig":
@@ -252,7 +254,19 @@ public class DadkvsConsoleClient {
 	}
 	scanner.close();
     }
+
+	private static int parseMode(String modeString) throws NumberFormatException {
+		int modeInt = -1;
+		try {
+			modeInt = Integer.parseInt(modeString);
+		} catch (NumberFormatException e) {
+			DebugMode debugMode = DebugMode.getDebugMode(modeString);
+			if (debugMode == null) {
+				throw new NumberFormatException();
+			} else {
+				modeInt = debugMode.ordinal();
+			}
+		}
+		return modeInt;
+	}
 }
-
-
-
