@@ -43,13 +43,12 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 	
 	boolean response_value = false;
 	int DebugModeIndex = request.getMode();
+	DebugMode debugMode = null;
 	// Get debug mode
 	try {
-		DebugMode debugMode = DebugMode.values()[DebugModeIndex];
+		debugMode = DebugMode.values()[DebugModeIndex];
 		this.server_state.new_debug_mode = debugMode;
 		response_value = true;
-		// for debug purposes
-		System.out.println(DebugMode.CRASH.ordinal());
 	} catch (ArrayIndexOutOfBoundsException e) {
 		System.out.println("Invalid debug mode: " + DebugModeIndex);
 	}
@@ -64,5 +63,14 @@ public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsCon
 	
 	responseObserver.onNext(response);
 	responseObserver.onCompleted();
+
+	if (debugMode == DebugMode.CRASH) {
+		crash_server();
+	}
     }
+
+	private void crash_server() {
+		this.server_state.server.shutdown();
+		System.exit(0);
+	}
 }

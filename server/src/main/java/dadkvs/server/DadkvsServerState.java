@@ -1,8 +1,10 @@
 package dadkvs.server;
 
 import dadkvs.util.DebugMode;
+import io.grpc.Server;
 
 public class DadkvsServerState {
+	Server		   server;
     boolean        i_am_leader;
 	DebugMode      old_debug_mode;
     DebugMode      new_debug_mode;
@@ -15,6 +17,7 @@ public class DadkvsServerState {
 
     
     public DadkvsServerState(int kv_size, int port, int myself) {
+	server = null;
 	base_port = port;
 	my_id = myself;
 	i_am_leader = false;
@@ -26,4 +29,8 @@ public class DadkvsServerState {
 	main_loop_worker = new Thread (main_loop);
 	main_loop_worker.start();
     }
+
+	public void setServer(Server server) {
+		this.server = server;
+	}
 }

@@ -10,7 +10,7 @@ public enum DebugMode {
 		@Override
         public  void executeDebugMode() {
 			System.out.println("Server crashed!");
-            System.exit(0);
+            // The rest is made in DadkvsConsoleServiceImpl.java
         }
 	},
 	FREEZE,
