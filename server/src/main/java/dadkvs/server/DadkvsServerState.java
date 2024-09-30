@@ -21,7 +21,6 @@ public class DadkvsServerState {
     List<ManagedChannel> followerChannels;  // Channels to communicate with follower servers
 
     
-    public DadkvsServerState(int kv_size, int port, int myself) {
 	server = null;
     public DadkvsServerState(int kv_size, int port, int myself, boolean leader) {
 	base_port = port;
@@ -34,19 +33,15 @@ public class DadkvsServerState {
 	main_loop = new MainLoop(this);
 	main_loop_worker = new Thread (main_loop);
 	main_loop_worker.start();
-    }
+	// Initialize the gRPC channels for the followers if this server is the leader
+	if (i_am_leader) {
+	// Initialize the channels for communicating with followers (other servers)
+	initializeFollowerChannels();
+	}
 
 	public void setServer(Server server) {
 		this.server = server;
 	}
-    
-
-     // Initialize the gRPC channels for the followers if this server is the leader
-     if (i_am_leader) {
-        // Initialize the channels for communicating with followers (other servers)
-        initializeFollowerChannels();
-    }
-    }
 
      /**
      * Initializes the communication channels to the follower servers.
@@ -60,9 +55,7 @@ public class DadkvsServerState {
                 ManagedChannelBuilder.forAddress("localhost", base_port + 3).usePlaintext().build(),
                 ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build()
                 
-        );
-
-        
+        ); 
     }
 
     /**
