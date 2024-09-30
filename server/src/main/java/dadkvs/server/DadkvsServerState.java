@@ -21,8 +21,8 @@ public class DadkvsServerState {
     List<ManagedChannel> followerChannels;  // Channels to communicate with follower servers
 
     
-	server = null;
     public DadkvsServerState(int kv_size, int port, int myself, boolean leader) {
+	server = null;
 	base_port = port;
 	my_id = myself;
 	i_am_leader = leader;
@@ -36,7 +36,8 @@ public class DadkvsServerState {
 	// Initialize the gRPC channels for the followers if this server is the leader
 	if (i_am_leader) {
 	// Initialize the channels for communicating with followers (other servers)
-	initializeFollowerChannels();
+		initializeFollowerChannels();
+	}
 	}
 
 	public void setServer(Server server) {
@@ -68,6 +69,4 @@ public class DadkvsServerState {
             }
         }
     }
-
-    
 }
