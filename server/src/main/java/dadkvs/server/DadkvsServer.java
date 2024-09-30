@@ -35,8 +35,10 @@ public class DadkvsServer {
 
 	int base_port = Integer.valueOf(args[0]);
 	int my_id     = Integer.valueOf(args[1]);
+	System.out.println("ID atribuido: " + my_id);
+	boolean isLeader = (my_id == 0);
 	
-	server_state = new DadkvsServerState(kvsize, base_port, my_id);
+	server_state = new DadkvsServerState(kvsize, base_port, my_id,  isLeader);
 	
 	port = base_port + my_id;
 
