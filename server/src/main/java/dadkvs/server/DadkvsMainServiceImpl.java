@@ -79,15 +79,16 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
                 responseObserver.onNext(response);
                 responseObserver.onCompleted();
             }
-        } else {
-			System.out.println("AQUIIIII");
-            // Followers reject direct commit requests, only leader should process commits
-            DadkvsMain.CommitReply response = DadkvsMain.CommitReply.newBuilder()
-                    .setReqid(request.getReqid()).setAck(false).build();
+        } 
+        // else {
+		// 	System.out.println("AQUIIIII");
+        //     // Followers reject direct commit requests, only leader should process commits
+        //     DadkvsMain.CommitReply response = DadkvsMain.CommitReply.newBuilder()
+        //             .setReqid(request.getReqid()).setAck(false).build();
 
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
-        }
+        //     responseObserver.onNext(response);
+        //     responseObserver.onCompleted();
+        // }
     }
 
     @Override
