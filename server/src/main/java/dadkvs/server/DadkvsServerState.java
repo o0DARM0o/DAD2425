@@ -2,10 +2,6 @@ package dadkvs.server;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
-
-import java.util.Iterator;
-
 import dadkvs.DadkvsPaxos;
 import dadkvs.DadkvsPaxos.HeartbeatReply;
 import dadkvs.DadkvsPaxosServiceGrpc;
@@ -33,14 +29,27 @@ public class DadkvsServerState {
     int current_leader_id;
     boolean leader_alive;  // Track whether the leader is alive
     long last_heartbeat;  // Track the last heartbeat from the leader
-    private final Object electionLock = new Object(); // Bloqueio para sincronização da eleição
+    private final Object electionLock = new Object(); 
     boolean isInElection = false;
+
 	DadkvsMainServiceImpl mainServiceImpl = null;
 	DadkvsPaxosServiceImpl paxosServiceImpl = null;
 	private final Object freezeLock = new Object(); // Lock object for freeze/unfreeze mechanism
-	
-	private int i = 0;
 
+    int n_servers;
+
+    public int acceptedProposalNumber; // Highest accepted proposal number
+    public int acceptedValue = -1; 
+    
+    /**
+     * Constructor for the server state. Initializes key parameters, store,
+     * channels, and starts the main loop.
+     * 
+     * @param kv_size Size of the key-value store
+     * @param port    Base port for communication
+     * @param myself  Server's ID
+     * @param leader  Indicates whether this server starts as the leader
+     */
     public DadkvsServerState(int kv_size, int port, int myself, boolean leader) {
 	server = null;
 	base_port = port;
@@ -59,6 +68,7 @@ public class DadkvsServerState {
     promisedIndex = -1;
     config = 0;
 
+    n_servers = 5;
 
 	// Initialize the gRPC channels for the followers if this server is the leader
 	if (i_am_leader) {
@@ -103,6 +113,7 @@ public class DadkvsServerState {
      */
     private void initializeFollowerChannels() {
         followerChannels = new ArrayList<>(); // Create a mutable list
+        
     try {
         if (this.my_id == 0) {
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 1).usePlaintext().build());
@@ -114,33 +125,30 @@ public class DadkvsServerState {
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 2).usePlaintext().build());
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 3).usePlaintext().build());
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
-
             //followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 1).usePlaintext().build());
         } else if (this.my_id == 2) {
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 3).usePlaintext().build());
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
-            // followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 1).usePlaintext().build());
-            // followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 2).usePlaintext().build());
         } else if (this.my_id == 3) {
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
-            // followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 1).usePlaintext().build());
-            // followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 2).usePlaintext().build());
-            // followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 3).usePlaintext().build());
+            n_servers = 0;
         } else if (this.my_id == 4) {
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 1).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 2).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 3).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 4).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
+        }
+        n_servers = followerChannels.size() + 1;
+        if (this.my_id == 4){
+            n_servers = 1;
         }
     } catch (Exception e) {
         System.err.println("Error initializing follower channels: " + e.getMessage());
-        // Handle the exception, e.g., set followerChannels to an empty list
-       // followerChannels = new ArrayList<>(); // Set to an empty list or handle as needed
     }
 }
 
 
-     // Start sending heartbeat messages periodically
+     /**
+     * Starts sending heartbeat messages periodically to all followers. Only the
+     * leader sends heartbeats.
+     */
      private void startHeartbeat() {
         Thread heartbeatThread = new Thread(() -> {
             while (i_am_leader) {
@@ -156,7 +164,7 @@ public class DadkvsServerState {
         heartbeatThread.start();
     }
 
-// Send heartbeat to all followers asynchronously using the new response collector
+	// Send heartbeat to all followers asynchronously using the new response collector
     private void sendHeartbeatToFollowers() {
         ArrayList<HeartbeatReply> responses = new ArrayList<>();
         GenericResponseCollector<HeartbeatReply> collector = new GenericResponseCollector<>(responses, followerChannels.size());
@@ -179,84 +187,15 @@ public class DadkvsServerState {
                 System.err.println("Failed to send heartbeat: " + e.getMessage());
             }
         }
-
-        // Wait for all responses or a target number of responses
-        collector.waitForTarget(followerChannels.size() / 2);
+		// Wait for all responses or a target number of responses
+		collector.waitForTarget(followerChannels.size() / 2);
     }
-    
-    // Method to check if a channel is active
-    private boolean isChannelActive(ManagedChannel channel) {
-        try {
-            // Lightweight operation if applicable
-            DadkvsPaxosServiceGrpc.DadkvsPaxosServiceBlockingStub stub = DadkvsPaxosServiceGrpc.newBlockingStub(channel);
-            DadkvsPaxos.HeartbeatRequest request = DadkvsPaxos.HeartbeatRequest.newBuilder().setLeaderId(my_id).build();
-            stub.heartbeat(request); // This could just be a ping call or similar
-            return true; // If no exception is thrown, the channel is active
-        } catch (Exception e) {
-            System.err.println("Channel check failed: " + e.getMessage());
-            return false; // Channel is not active
-        }
-    }
-
-    // Check if the server is active
-private boolean isServerActive(int followerId) {
-    // Logic to check if the server is up, e.g., by attempting a lightweight RPC call
-    int checkPort = base_port + followerId;
-    try {
-        // You can attempt a lightweight connection check
-        ManagedChannel checkChannel = ManagedChannelBuilder.forAddress("localhost", checkPort)
-                .usePlaintext()
-                .build();
-        
-        // Create a stub and perform a no-op request
-        DadkvsPaxosServiceGrpc.DadkvsPaxosServiceBlockingStub stub = DadkvsPaxosServiceGrpc.newBlockingStub(checkChannel);
-        // Use a lightweight request like a ping, if applicable
-        DadkvsPaxos.HeartbeatRequest request = DadkvsPaxos.HeartbeatRequest.newBuilder().setLeaderId(my_id).build();
-        stub.heartbeat(request); // This could just be a ping call or similar
-
-        // If no exception occurs, the server is active
-        return true;
-    } catch (Exception e) {
-        System.err.println("Server " + followerId + " is not active: " + e.getMessage());
-        return false; // Server is not active
-    }
-}
-    
-    // Reinitialize a follower channel
-    private void reinitializeFollowerChannel(ManagedChannel channel) {
-        int followerId = followerChannels.indexOf(channel) + 1; // Get the ID from the index
-        int newPort = base_port + followerId; // Calculate the new port based on your logic
-    
-        // Check if the server is active before creating a new channel
-        if (isServerActive(followerId)) {
-            // Shutdown the old channel if it's being reinitialized
-            channel.shutdown();
-            try {
-                if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
-                    System.err.println("Channel did not terminate in the specified time.");
-                }
-            } catch (InterruptedException e) {
-                System.err.println("Interrupted while shutting down channel: " + e.getMessage());
-                Thread.currentThread().interrupt(); // Restore interrupted status
-            }
-    
-            // Create a new channel for the follower
-            ManagedChannel newChannel = ManagedChannelBuilder.forAddress("localhost", newPort)
-                    .usePlaintext()
-                    .build();
-    
-            // Replace the old channel with the new channel
-            int index = followerChannels.indexOf(channel);
-            if (index != -1) {
-                followerChannels.set(index, newChannel);
-            }
-        } else {
-            System.err.println("Server " + followerId + " is not active, skipping channel reinitialization.");
-            followerChannels.remove(channel); // Remove the channel if the corresponding server is inactive
-        }
-    }
-    
-    // Follower method to handle heartbeat from leader
+      
+     /**
+     * Handles a received heartbeat from the leader and resets the heartbeat timer.
+     * 
+     * @param leaderId The ID of the leader sending the heartbeat
+     */
     public void handleHeartbeat(int leaderId) {
         synchronized (electionLock) {
             System.out.println("HEARTBEAT: " + leaderId + " SERVER: " + current_leader_id);
@@ -275,18 +214,19 @@ private boolean isServerActive(int followerId) {
         }
     }
 
-    // Monitor leader's heartbeat and trigger election if no heartbeat is received
+    /**
+     * Starts monitoring the current leader by checking for heartbeat timeouts.
+     * If no heartbeat is received within 5 seconds, an election is triggered.
+     */
     public void monitorLeader() {
 
             new Thread(() -> {
                 while (!i_am_leader) {
-                    System.out.println("AQUII 1111");
                     long now = System.currentTimeMillis();
                     if (now - last_heartbeat > 5000) {
                         System.out.println("Leader timeout detected, starting re-election.");
                         leader_alive = false;
                         last_heartbeat = System.currentTimeMillis();
-                        System.out.println("AQUI 22222");
                         startLeaderElection();
                     }
                     try {
@@ -297,41 +237,36 @@ private boolean isServerActive(int followerId) {
             }
             }).start();
     }
-    // Placeholder method for starting leader election
+       
+    /**
+     * Starts a leader election process if no leader heartbeat is received within
+     * the expected timeout.
+     */
     private void startLeaderElection() {
 
         if(isInElection) {
             return;
         }
         
-        isInElection = true; // Marque que estamos em uma eleição
+        isInElection = true;
     
-        // Lógica para eleger um novo líder
         int current_leader = (current_leader_id + 1) % 5; 
-        //System.out.println("New leader elected: " + current_leader);
         
-        // Se este servidor é agora o líder
         if (current_leader == my_id) {
             System.out.println("I'm the new leader");
             i_am_leader = true;
             reinitializeFollowerChannels();  // Reinitialize channels for the new leader
             startHeartbeat();  // Start sending heartbeats as the new leader
         } else {
-            i_am_leader = false; // Este servidor não é mais o líder
+            i_am_leader = false;
         }
     
-        // Notifica todos os servidores que a eleição terminou
-        isInElection = false; // Libere a flag após a eleição
-       /*  try {
-            notifyAll(); // Notifica todos os threads que estavam esperando
-        } catch (IllegalMonitorStateException e ){
-            System.out.println("Can't access Thread: " + e.getMessage());
-
-        }*/
+        isInElection = false; 
     }
     
     /**
-     * Reinitialize follower channels when this server becomes the leader.
+     * Reinitializes the communication channels with follower servers.
+     * This is typically done after an election when a new leader is chosen.
      */
     public void reinitializeFollowerChannels() {
         cleanup();
