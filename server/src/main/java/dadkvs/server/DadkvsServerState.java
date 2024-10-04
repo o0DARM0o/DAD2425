@@ -133,15 +133,32 @@ public class DadkvsServerState {
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 2).usePlaintext().build());
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 3).usePlaintext().build());
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
-            //followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port - 1).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port).usePlaintext().build());
         } else if (this.my_id == 2) {
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 3).usePlaintext().build());
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 1).usePlaintext().build());
+
+
         } else if (this.my_id == 3) {
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 2).usePlaintext().build());            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 1).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port).usePlaintext().build());
+
+
             n_servers = 0;
         } else if (this.my_id == 4) {
             followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 3).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 2).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 1).usePlaintext().build());
+            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port).usePlaintext().build());
+
+
+
+
         }
         n_servers = followerChannels.size() + 1;
         if (this.my_id == 4){
@@ -214,6 +231,9 @@ public class DadkvsServerState {
                 current_leader_id = my_id;
                 reinitializeFollowerChannels();  // Reinitialize channels for the new leader
                 startHeartbeat();  // Start sending heartbeats as the new leader
+            } else if(leaderId > current_leader_id && this.i_am_leader) {
+                current_leader_id = leaderId;
+                this.i_am_leader = false;
             }
             last_heartbeat = System.currentTimeMillis();
             leader_alive = true;
