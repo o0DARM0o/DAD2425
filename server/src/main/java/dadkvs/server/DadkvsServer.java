@@ -6,6 +6,7 @@ import io.grpc.ServerBuilder;
 
 import dadkvs.DadkvsMain;
 import dadkvs.DadkvsMainServiceGrpc;
+import dadkvs.util.PaxosManager;
 
 
 public class DadkvsServer {
@@ -14,6 +15,8 @@ public class DadkvsServer {
 								    
     /** Server host port. */
     private static int port;
+
+	static PaxosManager paxosManager = new PaxosManager();
     
     public static void main(String[] args) throws Exception {
 	final int kvsize = 1000;
@@ -42,9 +45,9 @@ public class DadkvsServer {
 	
 	port = base_port + my_id;
 
-	final BindableService service_impl = new DadkvsMainServiceImpl(server_state);
+	final BindableService service_impl = new DadkvsMainServiceImpl(server_state, paxosManager);
 	final BindableService console_impl = new DadkvsConsoleServiceImpl(server_state);
-	final BindableService paxos_impl   = new DadkvsPaxosServiceImpl(server_state);
+	final BindableService paxos_impl   = new DadkvsPaxosServiceImpl(server_state, paxosManager);
 	
 	// Create a new server to listen on port.
 	Server server = ServerBuilder.forPort(port).addService(service_impl).addService(console_impl).addService(paxos_impl).build();

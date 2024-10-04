@@ -1,25 +1,43 @@
 package dadkvs.util;
 
-import java.util.HashMap;
-import java.util.Map;
-
 public class PaxosInstance {
-    private int proposalNumber;
+    private int key;
     private int acceptedValue;
     private int acceptedTimestamp;
+    private int proposalTimestamp;
+    private int proposalValue;
 
-    public PaxosInstance(int proposalNumber, int acceptedValue, int acceptedTimestamp) {
-        this.proposalNumber = proposalNumber;
+    public int getProposalValue() {
+        return proposalValue;
+    }
+
+    public void setProposalValue(int proposalValue) {
+        this.proposalValue = proposalValue;
+    }
+
+    public PaxosInstance(int key, int acceptedValue, int acceptedTimestamp, int proposalTimestamp, int proposalValue) {
+        this.key = key;
         this.acceptedValue = acceptedValue;
         this.acceptedTimestamp = acceptedTimestamp;
+        this.proposalTimestamp = proposalTimestamp;
+        this.proposalValue = proposalValue;
+
     }
 
-    public int getProposalNumber() {
-        return proposalNumber;
+    public int getProposalTimestamp() {
+        return proposalTimestamp;
     }
 
-    public void setProposalNumber(int proposalNumber) {
-        this.proposalNumber = proposalNumber;
+    public void setProposalTimestamp(int proposalTimestamp) {
+        this.proposalTimestamp = proposalTimestamp;
+    }
+
+    public int getKey() {
+        return key;
+    }
+
+    public void setKey(int proposalNumber) {
+        this.key = proposalNumber;
     }
 
     public int getAcceptedValue() {
@@ -38,27 +56,4 @@ public class PaxosInstance {
         this.acceptedTimestamp = acceptedTimestamp;
     }
 
-}
-
-class PaxosManager {
-    private Map<Integer, PaxosInstance> instances; // key: index, value: PaxosInstance
-
-    public PaxosManager() {
-        this.instances = new HashMap<>();
-    }
-
-    public void startPaxosInstance(int index, int proposalNumber) {
-        // Create a new Paxos instance or retrieve existing one
-        PaxosInstance instance = instances.getOrDefault(index, new PaxosInstance(proposalNumber, -1, -1));
-        instances.put(index, instance);
-        
-        // Logic to handle proposing values, accepting, etc.
-    }
-
-    public PaxosInstance getPaxosInstance(int index) {
-        return instances.get(index);
-    }
-
-    // Additional methods for managing Paxos logic
-    // ...
 }

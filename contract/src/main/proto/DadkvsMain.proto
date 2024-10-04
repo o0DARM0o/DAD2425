@@ -50,6 +50,6 @@ service DadkvsMainService {
   rpc committx (CommitRequest) returns (CommitReply);
 
   // New RPCs for leader-follower coordination
-  rpc sequenceCommit (SequencedRequest) returns (SequenceAck);
+  rpc sequenceCommit (CommitRequest) returns (SequenceAck);
 }
 

@@ -44,10 +44,19 @@ message LearnReply {
   bool  learnaccepted = 3;
 }
 
+message HeartbeatRequest {
+  int32 leaderId = 1;
+}
+
+message HeartbeatReply {
+  bool ack = 1;
+}
+
 service DadkvsPaxosService {
   rpc phaseone (PhaseOneRequest) returns (PhaseOneReply);
   rpc phasetwo (PhaseTwoRequest) returns (PhaseTwoReply);
   rpc learn (LearnRequest) returns (LearnReply);
+  rpc heartbeat (HeartbeatRequest) returns (HeartbeatReply);
 }
 
 
