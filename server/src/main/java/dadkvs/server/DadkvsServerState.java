@@ -2,6 +2,9 @@ package dadkvs.server;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import com.google.api.SystemParameter;
+
 import dadkvs.DadkvsPaxos;
 import dadkvs.DadkvsPaxos.HeartbeatReply;
 import dadkvs.DadkvsPaxosServiceGrpc;
@@ -74,6 +77,11 @@ public class DadkvsServerState {
 	if (i_am_leader) {
 	// Initialize the channels for communicating with followers (other servers)
 		initializeFollowerChannels();
+		try {
+			Thread.sleep(1500);
+		} catch (InterruptedException e) {
+			System.out.println("[new DadkvsServerState]: something went wrong");
+		}
         startHeartbeat();
 	} else {
         monitorLeader();
@@ -168,19 +176,15 @@ public class DadkvsServerState {
     private void sendHeartbeatToFollowers() {
         ArrayList<HeartbeatReply> responses = new ArrayList<>();
         GenericResponseCollector<HeartbeatReply> collector = new GenericResponseCollector<>(responses, followerChannels.size());
-
         // Send heartbeat requests to all follower servers
         for (ManagedChannel channel : followerChannels) {
             try {
                 // Create an asynchronous stub
                 DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub asyncStub = DadkvsPaxosServiceGrpc.newStub(channel);
-
                 // Create a heartbeat request
                 DadkvsPaxos.HeartbeatRequest request = DadkvsPaxos.HeartbeatRequest.newBuilder().setLeaderId(my_id).build();
-
                 // Create a StreamObserver to collect the response
                 CollectorStreamObserver<HeartbeatReply> streamObserver = new CollectorStreamObserver<>(collector);
-
                 // Make the asynchronous gRPC call
                 asyncStub.heartbeat(request, streamObserver);
             } catch (Exception e) {
