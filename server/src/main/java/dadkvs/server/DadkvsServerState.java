@@ -174,7 +174,7 @@ public class DadkvsServerState {
      * Starts sending heartbeat messages periodically to all followers. Only the
      * leader sends heartbeats.
      */
-     private void startHeartbeat() {
+    void startHeartbeat() {
         Thread heartbeatThread = new Thread(() -> {
             while (i_am_leader) {
                 try {
