@@ -186,7 +186,6 @@ public class DadkvsServerState {
      */
     public void handleHeartbeat(int leaderId) {
         synchronized (electionLock) {
-            System.out.println("HEARTBEAT: " + leaderId + " SERVER: " + current_leader_id);
             if (current_leader_id < leaderId) {
                 System.out.println("New leader detected: " + leaderId);
                 current_leader_id = leaderId;
