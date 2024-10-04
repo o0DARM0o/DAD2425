@@ -285,6 +285,7 @@ public class DadkvsServerState {
             reinitializeFollowerChannels();  // Reinitialize channels for the new leader
             startHeartbeat();  // Start sending heartbeats as the new leader
         } else {
+			current_leader_id = (current_leader_id + 1) % 5;
             i_am_leader = false;
         }
     
