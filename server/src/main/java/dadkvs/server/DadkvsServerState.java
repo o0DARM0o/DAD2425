@@ -117,55 +117,18 @@ public class DadkvsServerState {
      * 
      * This is required only if the current server is the leader.
      */
-    private void initializeFollowerChannels() {
-        followerChannels = new ArrayList<>(); // Create a mutable list
-        
-    try {
-        if (this.my_id == 0) {
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 1).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 2).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 3).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
-        } else if (this.my_id == 1) {
-            //followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 1).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 2).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 3).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port).usePlaintext().build());
-        } else if (this.my_id == 2) {
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 3).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 1).usePlaintext().build());
-
-
-        } else if (this.my_id == 3) {
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 2).usePlaintext().build());            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 1).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port).usePlaintext().build());
-
-
-            n_servers = 0;
-        } else if (this.my_id == 4) {
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 4).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 3).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 2).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + 1).usePlaintext().build());
-            followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port).usePlaintext().build());
-
-
-
-
-        }
-        n_servers = followerChannels.size() + 1;
-        if (this.my_id == 4){
-            n_servers = 1;
-        }
-    } catch (Exception e) {
-        System.err.println("Error initializing follower channels: " + e.getMessage());
-    }
-}
+	private void initializeFollowerChannels() {
+		followerChannels = new ArrayList<>(); // Create a mutable list
+		for (int i = 0; i < 5; i++) {
+			try {
+				if (this.my_id != i) {
+					followerChannels.add(ManagedChannelBuilder.forAddress("localhost", base_port + i).usePlaintext().build());
+				}
+			} catch (Exception e) {
+				System.err.println("Error initializing follower channel " + i + ": " + e.getMessage());
+			}
+		}
+	}
 
 
      /**
