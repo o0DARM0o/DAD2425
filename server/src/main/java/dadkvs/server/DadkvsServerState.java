@@ -203,13 +203,15 @@ public class DadkvsServerState {
     public void handleHeartbeat(int leaderId) {
         synchronized (electionLock) {
             System.out.println("HEARTBEAT: " + leaderId + " SERVER: " + current_leader_id);
-            if (current_leader_id != leaderId) {
+            if (current_leader_id < leaderId) {
                 System.out.println("New leader detected: " + leaderId);
                 current_leader_id = leaderId;
+                this.i_am_leader = false;
                 monitorLeader();
             } else if(my_id == leaderId && !this.i_am_leader) {
                 System.out.println("I'm the new leader");
                 this.i_am_leader = true;
+                current_leader_id = my_id;
                 reinitializeFollowerChannels();  // Reinitialize channels for the new leader
                 startHeartbeat();  // Start sending heartbeats as the new leader
             }
@@ -259,6 +261,7 @@ public class DadkvsServerState {
         if (current_leader == my_id) {
             System.out.println("I'm the new leader");
             i_am_leader = true;
+            current_leader_id = current_leader;
             reinitializeFollowerChannels();  // Reinitialize channels for the new leader
             startHeartbeat();  // Start sending heartbeats as the new leader
         } else {
