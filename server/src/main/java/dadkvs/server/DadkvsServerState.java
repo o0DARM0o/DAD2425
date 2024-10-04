@@ -192,10 +192,10 @@ public class DadkvsServerState {
                 current_leader_id = leaderId;
                 this.i_am_leader = false;
                 monitorLeader();
-            } else if(my_id == leaderId && !this.i_am_leader) {
+            } else if(isMyId(leaderId) && !this.i_am_leader) {
                 System.out.println("I'm the new leader");
                 this.i_am_leader = true;
-                current_leader_id = my_id;
+                current_leader_id = leaderId;
                 reinitializeFollowerChannels();  // Reinitialize channels for the new leader
                 startHeartbeat();  // Start sending heartbeats as the new leader
             } else if(leaderId > current_leader_id && this.i_am_leader) {
