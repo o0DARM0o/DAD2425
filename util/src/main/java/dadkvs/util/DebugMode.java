@@ -1,5 +1,7 @@
 package dadkvs.util;
 
+import dadkvs.DadkvsConsoleServiceGrpc.DadkvsConsoleServiceImplBase;
+import dadkvs.DadkvsMainServiceGrpc.DadkvsMainServiceImplBase;
 import io.grpc.ServerCredentials;
 
 /**
@@ -13,7 +15,13 @@ public enum DebugMode {
             // The rest is made in DadkvsConsoleServiceImpl.java
         }
 	},
-	FREEZE,
+	FREEZE {
+		@Override
+        public  void executeDebugMode() {
+			System.out.println("Server froze!");
+            // The rest is made in DadkvsMainServiceImpl.java and DadkvsServerState.java
+        }
+	},
 	UN_FREEZE,
 	SLOW_MODE_ON,
 	SLOW_MODE_OFF;

@@ -7,6 +7,7 @@ import dadkvs.DadkvsMain;
 import dadkvs.DadkvsMainServiceGrpc;
 import dadkvs.DadkvsPaxos;
 import dadkvs.DadkvsPaxosServiceGrpc;
+import dadkvs.util.DebugMode;
 import dadkvs.util.PaxosManager;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
@@ -18,16 +19,40 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 	AtomicInteger sequenceCounter = new AtomicInteger(0);
     PaxosManager paxosManager;
     int paxosIndex;
+
+	private final Object freezeLock = new Object(); // Lock object for freeze/unfreeze mechanism
     
     public DadkvsMainServiceImpl(DadkvsServerState state, PaxosManager paxosManager) {
         this.server_state = state;
+		server_state.mainServiceImpl = this;
 	    this.timestamp = 0;
         this.paxosManager = paxosManager;
         this.paxosIndex = 0;
     }
 
+	private void checkFreeze() {
+		synchronized (freezeLock) {
+			while (server_state.new_debug_mode == DebugMode.FREEZE) {
+				try {
+					System.out.println("Server is in FREEZE mode. Pausing request handling...");
+					freezeLock.wait(); // Wait until UN_FREEZE is called
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt(); // Reset thread interrupt status
+				}
+			}
+		}
+    }
+
+	private void unfreeze() {
+		synchronized (freezeLock) {
+			System.out.println("Server is in UN_FREEZE mode. Resuming request handling...");
+			freezeLock.notifyAll(); // Notify all waiting threads
+		}
+	}
+
     @Override
     public void read(DadkvsMain.ReadRequest request, StreamObserver<DadkvsMain.ReadReply> responseObserver) {
+	checkFreeze(); // Check if server is frozen before processing the request
 	// for debug purposes
 	System.out.println("Receiving read request:" + request);
 
@@ -44,7 +69,9 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 
     @Override
     public void committx(DadkvsMain.CommitRequest request, StreamObserver<DadkvsMain.CommitReply> responseObserver) {
-        System.out.println("Receiving commit request: " + request);
+		checkFreeze(); // Check if server is frozen before processing the request
+
+		System.out.println("Receiving commit request: " + request);
         
         int proposedIndex = sequenceCounter.incrementAndGet();;
         int key = request.getWritekey();
@@ -178,7 +205,9 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
     }
     
     private void sendRejection(StreamObserver<DadkvsMain.CommitReply> responseObserver, DadkvsMain.CommitRequest request) {
-        DadkvsMain.CommitReply response = DadkvsMain.CommitReply.newBuilder()
+        checkFreeze();
+		
+		DadkvsMain.CommitReply response = DadkvsMain.CommitReply.newBuilder()
             .setReqid(request.getReqid())
             .setAck(false) // Rejeita
             .build();
@@ -189,7 +218,9 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 
     @Override
     public void sequenceCommit(DadkvsMain.CommitRequest request, StreamObserver<DadkvsMain.SequenceAck> responseObserver) {        // Follower processes the sequenced request sent by the leader
-        //System.out.println("Follower received sequence request: " + request.getSequenceNumber());
+        checkFreeze();
+		
+		//System.out.println("Follower received sequence request: " + request.getSequenceNumber());
 
         // Process the commit request (assume it is accepted for simplicity)
         boolean accepted = processCommit(request); // Apply the commit in sequence
@@ -211,7 +242,9 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
      * @return boolean indicating whether the commit was successful or not
      */
     private boolean processCommit(DadkvsMain.CommitRequest request) {
-        int key1 = request.getKey1();
+        checkFreeze();
+		
+		int key1 = request.getKey1();
         int version1 = request.getVersion1();
         int key2 = request.getKey2();
         int version2 = request.getVersion2();
@@ -227,5 +260,12 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
         // Attempt to commit the transaction in the key-value store
         return this.server_state.store.commit(txrecord);
     }
+
+	// Add an override for `executeDebugMode` to handle unfreezing
+	public void executeDebugMode(DebugMode debugMode) {
+		if (debugMode == DebugMode.UN_FREEZE) {
+			unfreeze(); // Call unfreeze when the mode is set to UN_FREEZE
+		}
+	}
 }
  

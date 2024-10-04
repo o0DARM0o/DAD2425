@@ -4,28 +4,49 @@ package dadkvs.server;
 
 import dadkvs.DadkvsPaxos;
 import dadkvs.DadkvsPaxosServiceGrpc;
-
+import dadkvs.util.DebugMode;
 import dadkvs.util.PaxosInstance;
 import dadkvs.util.PaxosManager;
 import io.grpc.stub.StreamObserver;
 
 public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosServiceImplBase {
 
-
     DadkvsServerState server_state;
     PaxosManager paxosManager;
     
+	private final Object freezeLock = new Object(); // Lock object for freeze/unfreeze mechanism
     
     public DadkvsPaxosServiceImpl(DadkvsServerState state, PaxosManager paxosManager) {
         this.server_state = state;
+		this.server_state.paxosServiceImpl = this;
         this.paxosManager = paxosManager;
 	
     }
     
+	private void checkFreeze() {
+		synchronized (freezeLock) {
+			while (server_state.new_debug_mode == DebugMode.FREEZE) {
+				try {
+					System.out.println("Server is in FREEZE mode. Pausing request handling...");
+					freezeLock.wait(); // Wait until UN_FREEZE is called
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt(); // Reset thread interrupt status
+				}
+			}
+		}
+    }
+
+	private void unfreeze() {
+		synchronized (freezeLock) {
+			System.out.println("Server is in UN_FREEZE mode. Resuming request handling...");
+			freezeLock.notifyAll(); // Notify all waiting threads
+		}
+	}
 
     @Override
     public void phaseone(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
-	// for debug purposes
+		checkFreeze(); // Check if server is frozen before processing the request
+		// for debug purposes
         System.out.println("Receive phase1 request: " + request);
 
         int proposedIndex = request.getPhase1Index();  // Índice da proposta recebida
@@ -71,7 +92,8 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
 
     @Override
     public void phasetwo(DadkvsPaxos.PhaseTwoRequest request, StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
-        // for debug purposes
+        checkFreeze(); // Check if server is frozen before processing the request
+		// for debug purposes
         System.out.println ("Receive phase two request: " + request);
         int proposedIndex = request.getPhase2Index();   // Número da proposta
         int value = request.getPhase2Value();           // Valor proposto
@@ -111,7 +133,8 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
 
     @Override
     public void learn(DadkvsPaxos.LearnRequest request, StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
-	// for debug purposes
+		checkFreeze(); // Check if server is frozen before processing the request
+		// for debug purposes
 	    System.out.println("Receive learn request: " + request);
         int learnedIndex = request.getLearnindex();    // Índice do valor aprendido
         int value = request.getLearnvalue();           // Valor aprendido
@@ -143,7 +166,9 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
     // Handle heartbeat request from leader
     @Override
     public void heartbeat(DadkvsPaxos.HeartbeatRequest request, StreamObserver<DadkvsPaxos.HeartbeatReply> responseObserver) {
-        int leaderId = request.getLeaderId();
+        checkFreeze(); // Check if server is frozen before processing the request
+
+		int leaderId = request.getLeaderId();
         System.out.println("Received heartbeat from leader: " + leaderId);
         this.server_state.handleHeartbeat(leaderId);  // Update the server state with the received heartbeat
 
@@ -152,4 +177,9 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
         responseObserver.onCompleted();
     }
 
+	public void executeDebugMode(DebugMode debugMode) {
+		if (debugMode == DebugMode.UN_FREEZE) {
+			unfreeze(); // Call unfreeze when the mode is set to UN_FREEZE
+		}
+	}
 }

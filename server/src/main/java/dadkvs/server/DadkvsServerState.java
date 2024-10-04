@@ -7,8 +7,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.Iterator;
 
 import dadkvs.DadkvsPaxos;
+import dadkvs.DadkvsPaxos.HeartbeatReply;
 import dadkvs.DadkvsPaxosServiceGrpc;
+import dadkvs.util.CollectorStreamObserver;
 import dadkvs.util.DebugMode;
+import dadkvs.util.GenericResponseCollector;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
@@ -32,7 +35,12 @@ public class DadkvsServerState {
     long last_heartbeat;  // Track the last heartbeat from the leader
     private final Object electionLock = new Object(); // Bloqueio para sincronização da eleição
     boolean isInElection = false;
-    
+	DadkvsMainServiceImpl mainServiceImpl = null;
+	DadkvsPaxosServiceImpl paxosServiceImpl = null;
+	private final Object freezeLock = new Object(); // Lock object for freeze/unfreeze mechanism
+	
+	private int i = 0;
+
     public DadkvsServerState(int kv_size, int port, int myself, boolean leader) {
 	server = null;
 	base_port = port;
@@ -51,6 +59,7 @@ public class DadkvsServerState {
     promisedIndex = -1;
     config = 0;
 
+
 	// Initialize the gRPC channels for the followers if this server is the leader
 	if (i_am_leader) {
 	// Initialize the channels for communicating with followers (other servers)
@@ -60,6 +69,28 @@ public class DadkvsServerState {
         monitorLeader();
     }
 	}
+
+	private void checkFreeze() {
+		synchronized (freezeLock) {
+			while (new_debug_mode == DebugMode.FREEZE) {
+				try {
+					System.out.println("Server_State is in FREEZE mode. Pausing heartbeat...");
+					freezeLock.wait(); // Wait until UN_FREEZE is called
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt(); // Reset thread interrupt status
+				}
+			}
+		}
+    }
+
+	private void unfreeze() {
+		synchronized (freezeLock) {
+			System.out.println("Server State is in UN_FREEZE mode. Resuming heartbeat...");
+			freezeLock.notifyAll(); // Notify all waiting threads
+		}
+	}
+
+
 
 	public void setServer(Server server) {
 		this.server = server;
@@ -114,7 +145,8 @@ public class DadkvsServerState {
         Thread heartbeatThread = new Thread(() -> {
             while (i_am_leader) {
                 try {
-                    Thread.sleep(2000);  // Send heartbeat every 2 seconds
+					Thread.sleep(2000);  // Send heartbeat every 2 seconds
+					checkFreeze();
                     sendHeartbeatToFollowers();
                 } catch (InterruptedException e) {
                     e.printStackTrace();
@@ -124,30 +156,32 @@ public class DadkvsServerState {
         heartbeatThread.start();
     }
 
-    // Send heartbeat to all followers
+// Send heartbeat to all followers asynchronously using the new response collector
     private void sendHeartbeatToFollowers() {
-        List<ManagedChannel> activeChannels = new ArrayList<>(followerChannels); // Copy to avoid ConcurrentModificationException
-        for (ManagedChannel channel : activeChannels) {
-            /*if (!isChannelActive(channel)) {
-                System.out.println("Channel is inactive, attempting to reinitialize...");
-                try {
-                    // Attempt to reinitialize the channel
-                    reinitializeFollowerChannel(channel);
-                } catch (Exception e) {
-                    System.err.println("Failed to reinitialize channel: " + e.getMessage());
-                    followerChannels.remove(channel); // Remove the channel if it failed again
-                    continue; // Skip to the next channel
-                }
-            }*/
-            // Attempt to send a heartbeat
+        ArrayList<HeartbeatReply> responses = new ArrayList<>();
+        GenericResponseCollector<HeartbeatReply> collector = new GenericResponseCollector<>(responses, followerChannels.size());
+
+        // Send heartbeat requests to all follower servers
+        for (ManagedChannel channel : followerChannels) {
             try {
-                DadkvsPaxosServiceGrpc.DadkvsPaxosServiceBlockingStub stub = DadkvsPaxosServiceGrpc.newBlockingStub(channel);
+                // Create an asynchronous stub
+                DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub asyncStub = DadkvsPaxosServiceGrpc.newStub(channel);
+
+                // Create a heartbeat request
                 DadkvsPaxos.HeartbeatRequest request = DadkvsPaxos.HeartbeatRequest.newBuilder().setLeaderId(my_id).build();
-                stub.heartbeat(request);
+
+                // Create a StreamObserver to collect the response
+                CollectorStreamObserver<HeartbeatReply> streamObserver = new CollectorStreamObserver<>(collector);
+
+                // Make the asynchronous gRPC call
+                asyncStub.heartbeat(request, streamObserver);
             } catch (Exception e) {
                 System.err.println("Failed to send heartbeat: " + e.getMessage());
             }
         }
+
+        // Wait for all responses or a target number of responses
+        collector.waitForTarget(followerChannels.size() / 2);
     }
     
     // Method to check if a channel is active
@@ -225,7 +259,7 @@ private boolean isServerActive(int followerId) {
     // Follower method to handle heartbeat from leader
     public void handleHeartbeat(int leaderId) {
         synchronized (electionLock) {
-            // System.out.println("HEARTBEAT: " + leaderId + " SERVER: " + current_leader_id);
+            System.out.println("HEARTBEAT: " + leaderId + " SERVER: " + current_leader_id);
             if (current_leader_id != leaderId) {
                 System.out.println("New leader detected: " + leaderId);
                 current_leader_id = leaderId;
@@ -315,4 +349,10 @@ private boolean isServerActive(int followerId) {
             }
         }
     }
+
+	public void executeDebugMode(DebugMode debugMode) {
+		if (debugMode == DebugMode.UN_FREEZE) {
+			unfreeze(); // Call unfreeze when the mode is set to UN_FREEZE
+		}
+	}
 }

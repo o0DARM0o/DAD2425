@@ -37,6 +37,13 @@ public class MainLoop implements Runnable  {
 	System.out.println("Main loop do work start");
 	if (server_state.new_debug_mode != server_state.old_debug_mode) {
 		server_state.new_debug_mode.executeDebugMode();
+		server_state.executeDebugMode(server_state.new_debug_mode);
+		if (server_state.mainServiceImpl != null) {
+			server_state.mainServiceImpl.executeDebugMode(server_state.new_debug_mode);
+		}
+		if (server_state.paxosServiceImpl != null) {
+			server_state.paxosServiceImpl.executeDebugMode(server_state.new_debug_mode);
+		} 
 		server_state.old_debug_mode = server_state.new_debug_mode;
 	}
 	this.has_work = false;
