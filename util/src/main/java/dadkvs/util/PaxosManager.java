@@ -5,7 +5,7 @@ import java.util.Map;
 
 
  public class PaxosManager {
-    private Map<Integer, PaxosInstance> instances; // key: index, value: PaxosInstance
+    private Map<Integer, PaxosInstance> instances; 
 
     public PaxosManager() {
         this.instances = new HashMap<>();
@@ -16,14 +16,10 @@ import java.util.Map;
         PaxosInstance instance = instances.getOrDefault(index, new PaxosInstance(key, -1, -1, proposalTimestamp, proposalValue));
         instances.put(index, instance);
         
-        // Logic to handle proposing values, accepting, etc.
     }
 
     public PaxosInstance getPaxosInstance(int index) {
         return instances.get(index);
     }
-
-    // Additional methods for managing Paxos logic
-    // ...
 }
 

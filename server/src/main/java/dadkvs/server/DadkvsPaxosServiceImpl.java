@@ -5,7 +5,6 @@ package dadkvs.server;
 import dadkvs.DadkvsPaxos;
 import dadkvs.DadkvsPaxosServiceGrpc;
 
-import dadkvs.util.PaxosInstance;
 import dadkvs.util.PaxosManager;
 import io.grpc.stub.StreamObserver;
 
@@ -24,121 +23,84 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
     
 
     @Override
-    public void phaseone(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
-	// for debug purposes
-        System.out.println("Receive phase1 request: " + request);
+public void phaseone(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
+    System.out.println("Receive phase1 request: " + request);
 
-        int proposedIndex = request.getPhase1Index();  // Índice da proposta recebida
-        int proposedTimestamp = request.getPhase1Timestamp();  // Timestamp da proposta
-        int promisedIndex = server_state.promisedIndex;  // Último índice prometido
-        int currentTimestamp = -1;
+    int proposedIndex = request.getPhase1Index();  // Proposal number n
+    int promisedIndex = server_state.promisedIndex;  // Highest promised proposal number
+    int acceptedProposalNumber = server_state.acceptedProposalNumber; // Highest accepted proposal number
+    int acceptedValue = server_state.acceptedValue; // Value of highest accepted proposal
 
-        // Verifica o timestamp da proposta anterior aceita (se existir)
-        PaxosInstance instance = paxosManager.getPaxosInstance(proposedIndex - 1);
-        if (instance != null) {
-            currentTimestamp = instance.getAcceptedTimestamp();
+    DadkvsPaxos.PhaseOneReply.Builder response = DadkvsPaxos.PhaseOneReply.newBuilder()
+        .setPhase1Config(request.getPhase1Config())
+        .setPhase1Index(proposedIndex);
+
+    if (proposedIndex > promisedIndex) {
+        // Update promisedIndex
+        server_state.promisedIndex = proposedIndex;
+        response.setPhase1Accepted(true);
+
+        if (acceptedProposalNumber != -1) {
+            // Include highest accepted proposal number and value
+            response.setPhase1Timestamp(acceptedProposalNumber)
+                    .setPhase1Value(acceptedValue);
         }
-
-        DadkvsPaxos.PhaseOneReply.Builder response = DadkvsPaxos.PhaseOneReply.newBuilder()
-            .setPhase1Config(request.getPhase1Config())
-            .setPhase1Index(proposedIndex)
-            .setPhase1Accepted(false);  // Inicialmente, a proposta não é aceita
-
-        // Verifica se a proposta pode ser aceita
-        if (proposedIndex > promisedIndex) {
-            if (proposedTimestamp >= currentTimestamp) {
-                server_state.promisedIndex = proposedIndex;
-                System.out.println("PHASE 1 PROMISED INDEX: " + server_state.promisedIndex);
-
-                // Aceita a proposta e envia o valor e timestamp aceitos
-                if (instance != null) {
-                    response.setPhase1Accepted(true)
-                            .setPhase1Value(instance.getProposalValue())  // Valor da última proposta
-                            .setPhase1Timestamp(proposedTimestamp);  // Timestamp associado
-                } else {
-                    // Caso não haja proposta anterior
-                    response.setPhase1Accepted(true)
-                            .setPhase1Timestamp(proposedTimestamp);  // Usar timestamp da proposta atual
-                }
-            }
-        }
-
-        // Envia a resposta ao líder
-        responseObserver.onNext(response.build());
-        responseObserver.onCompleted();
-
+    } else {
+        response.setPhase1Accepted(false);
     }
 
-    @Override
-    public void phasetwo(DadkvsPaxos.PhaseTwoRequest request, StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
-        // for debug purposes
-        System.out.println ("Receive phase two request: " + request);
-        int proposedIndex = request.getPhase2Index();   // Número da proposta
-        int value = request.getPhase2Value();           // Valor proposto
-        int timestamp = request.getPhase2Timestamp();   // Timestamp do valor proposto
-        int promisedIndex = server_state.promisedIndex; // Último índice prometido
+    responseObserver.onNext(response.build());
+    responseObserver.onCompleted();
+}
 
-        System.out.println("PHASE 2 PROMISED INDEX: " + server_state.promisedIndex);
-        
-        PaxosInstance currentInstance = paxosManager.getPaxosInstance(proposedIndex);
 
-        PaxosInstance previousInstance = paxosManager.getPaxosInstance(proposedIndex-1);
-        int currentAcceptedTimestamp = previousInstance != null ? previousInstance.getAcceptedTimestamp() : -1;
+@Override
+public void phasetwo(DadkvsPaxos.PhaseTwoRequest request, StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
+    System.out.println("Receive phase two request: " + request);
+    int proposedIndex = request.getPhase2Index(); // Proposal number n
+    int value = request.getPhase2Value();
+    int promisedIndex = server_state.promisedIndex;
 
-        DadkvsPaxos.PhaseTwoReply.Builder response = DadkvsPaxos.PhaseTwoReply.newBuilder()
-            .setPhase2Config(request.getPhase2Config())
-            .setPhase2Index(proposedIndex)
-            .setPhase2Accepted(false);  // Por padrão, a resposta é de não aceitação
+    DadkvsPaxos.PhaseTwoReply.Builder response = DadkvsPaxos.PhaseTwoReply.newBuilder()
+        .setPhase2Config(request.getPhase2Config())
+        .setPhase2Index(proposedIndex);
 
-        // Verifica se o índice proposto é maior ou igual ao índice prometido
-        if (proposedIndex >= promisedIndex) {
-            // Verifica se o timestamp é mais recente que o último aceito
-            if (timestamp >= currentAcceptedTimestamp) {
-                // Aceita a proposta e atualiza o valor e timestamp
-                currentInstance.setAcceptedValue(value);
-                currentInstance.setAcceptedTimestamp(timestamp);
+    if (proposedIndex == promisedIndex) {
+        // Accept the proposal
+        server_state.acceptedProposalNumber = proposedIndex;
+        server_state.acceptedValue = value;
 
-                // Marca como aceita
-                response.setPhase2Accepted(true);
-            }
-        }
-
-        // Envia a resposta ao líder
-        responseObserver.onNext(response.build());
-        responseObserver.onCompleted();
-
+        response.setPhase2Accepted(true);
+    } else {
+        response.setPhase2Accepted(false);
     }
 
-    @Override
-    public void learn(DadkvsPaxos.LearnRequest request, StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
-	// for debug purposes
-	    System.out.println("Receive learn request: " + request);
-        int learnedIndex = request.getLearnindex();    // Índice do valor aprendido
-        int value = request.getLearnvalue();           // Valor aprendido
-        int timestamp = request.getLearntimestamp();   // Timestamp associado
-        
-        PaxosInstance currentInstance = paxosManager.getPaxosInstance(learnedIndex);
+    responseObserver.onNext(response.build());
+    responseObserver.onCompleted();
+}
 
-        PaxosInstance previousInstance = paxosManager.getPaxosInstance(learnedIndex-1);
-        int previousAcceptedTimestamp = previousInstance != null ? previousInstance.getAcceptedTimestamp() : -1;
 
-        // Apenas aprende o valor se o timestamp for mais recente ou igual
-        if (timestamp >= previousAcceptedTimestamp) {
-            currentInstance.setAcceptedValue(value);
-            currentInstance.setAcceptedTimestamp(timestamp);
-        }
-    
-        DadkvsPaxos.LearnReply response = DadkvsPaxos.LearnReply.newBuilder()
-            .setLearnconfig(request.getLearnconfig())
-            .setLearnindex(learnedIndex)
-            .setLearnaccepted(true)  // Assume que o aprendizado foi bem-sucedido
-            .build();
-    
-        // Envia a resposta
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
+@Override
+public void learn(DadkvsPaxos.LearnRequest request, StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
+    System.out.println("Receive learn request: " + request);
+    int learnedIndex = request.getLearnindex();
+    int value = request.getLearnvalue();
+    int timestamp = request.getLearntimestamp();
 
-    }
+    // Update the accepted value
+    server_state.acceptedProposalNumber = learnedIndex;
+    server_state.acceptedValue = value;
+
+    DadkvsPaxos.LearnReply response = DadkvsPaxos.LearnReply.newBuilder()
+        .setLearnconfig(request.getLearnconfig())
+        .setLearnindex(learnedIndex)
+        .setLearnaccepted(true)
+        .build();
+
+    responseObserver.onNext(response);
+    responseObserver.onCompleted();
+}
+
 
     // Handle heartbeat request from leader
     @Override
