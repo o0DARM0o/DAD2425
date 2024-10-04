@@ -3,8 +3,6 @@ package dadkvs.server;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.google.api.SystemParameter;
-
 import dadkvs.DadkvsPaxos;
 import dadkvs.DadkvsPaxos.HeartbeatReply;
 import dadkvs.DadkvsPaxosServiceGrpc;
@@ -21,7 +19,7 @@ public class DadkvsServerState {
 	DebugMode      old_debug_mode;
     DebugMode      new_debug_mode;
     int            base_port;
-    int            my_id;
+    final int      my_id;
     int            store_size;
     KeyValueStore  store;
     MainLoop       main_loop;
@@ -199,7 +197,13 @@ public class DadkvsServerState {
                 // Create an asynchronous stub
                 DadkvsPaxosServiceGrpc.DadkvsPaxosServiceStub asyncStub = DadkvsPaxosServiceGrpc.newStub(channel);
                 // Create a heartbeat request
-                DadkvsPaxos.HeartbeatRequest request = DadkvsPaxos.HeartbeatRequest.newBuilder().setLeaderId(my_id).build();
+				DadkvsPaxos.HeartbeatRequest request = null;
+				if (isMyId(current_leader_id)) {
+					request = DadkvsPaxos.HeartbeatRequest.newBuilder().setLeaderId(current_leader_id).build();
+				} else {
+					System.out.println("[sendHeartbeatToFollowers]: Something went wrong");
+					throw new IllegalArgumentException();
+				}
                 // Create a StreamObserver to collect the response
                 CollectorStreamObserver<HeartbeatReply> streamObserver = new CollectorStreamObserver<>(collector);
                 // Make the asynchronous gRPC call
@@ -276,23 +280,27 @@ public class DadkvsServerState {
         
         isInElection = true;
     
-        int current_leader = (current_leader_id + 1) % 5; 
+        final int current_leader = current_leader_id + 1; 
         
-        if (current_leader == my_id) {
+        if (isMyId(current_leader)) {
             System.out.println("I'm the new leader");
             i_am_leader = true;
             current_leader_id = current_leader;
             reinitializeFollowerChannels();  // Reinitialize channels for the new leader
             startHeartbeat();  // Start sending heartbeats as the new leader
         } else {
-			current_leader_id = (current_leader_id + 1) % 5;
+			current_leader_id++;
             i_am_leader = false;
         }
     
         isInElection = false; 
     }
     
-    /**
+    private boolean isMyId(int leader_id) {
+		return leader_id % 5 == my_id; 
+	}
+
+	/**
      * Reinitializes the communication channels with follower servers.
      * This is typically done after an election when a new leader is chosen.
      */
