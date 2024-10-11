@@ -10,23 +10,23 @@ import dadkvs.util.PaxosManager;
 import io.grpc.ManagedChannel;
 import io.grpc.stub.StreamObserver;
 
-public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServiceImplBase {
+	public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServiceImplBase {
 
-    DadkvsServerState server_state;
-    int               timestamp;
-	int sequenceCounter = 0;
-    PaxosManager paxosManager;
-    int paxosIndex;
+	DadkvsServerState server_state;
+	int               timestamp;
+	int               sequenceCounter = 0;
+	PaxosManager      paxosManager;
+	int               paxosIndex;
 
 	private final Object freezeLock = new Object(); // Lock object for freeze/unfreeze mechanism
-    
-    public DadkvsMainServiceImpl(DadkvsServerState state, PaxosManager paxosManager) {
-        this.server_state = state;
+
+	public DadkvsMainServiceImpl(DadkvsServerState state, PaxosManager paxosManager) {
+		this.server_state = state;
 		server_state.mainServiceImpl = this;
-	    this.timestamp = 0;
-        this.paxosManager = paxosManager;
-        this.paxosIndex = 0;
-    }
+		this.timestamp = 0;
+		this.paxosManager = paxosManager;
+		this.paxosIndex = 0;
+	}
 
 	private void checkFreeze() {
 		synchronized (freezeLock) {
@@ -39,7 +39,7 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 				}
 			}
 		}
-    }
+	}
 
 	private void unfreeze() {
 		synchronized (freezeLock) {
@@ -48,8 +48,10 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 		}
 	}
 
-    @Override
-    public void read(DadkvsMain.ReadRequest request, StreamObserver<DadkvsMain.ReadReply> responseObserver) {
+	@Override
+	public void read(DadkvsMain.ReadRequest request,
+			StreamObserver<DadkvsMain.ReadReply> responseObserver) {
+
 	checkFreeze(); // Check if server is frozen before processing the request
 	// for debug purposes
 	System.out.println("Receiving read request:" + request);
@@ -59,241 +61,346 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 	VersionedValue vv = this.server_state.store.read(key);
 	
 	DadkvsMain.ReadReply response =DadkvsMain.ReadReply.newBuilder()
-	    .setReqid(reqid).setValue(vv.getValue()).setTimestamp(vv.getVersion()).build();
-	
+		.setReqid(reqid).setValue(vv.getValue()).setTimestamp(vv.getVersion()).build();
+
 	responseObserver.onNext(response);
 	responseObserver.onCompleted();
-    }
+	}
 
-    @Override
-    public void committx(DadkvsMain.CommitRequest request, StreamObserver<DadkvsMain.CommitReply> responseObserver) {
+	@Override
+	public void committx(DadkvsMain.CommitRequest request,
+			StreamObserver<DadkvsMain.CommitReply> responseObserver) {
+
 		checkFreeze(); // Check if server is frozen before processing the request
-
+	
 		System.out.println("Receiving commit request: " + request);
+	
+		int proposedIndex = getProposedIndex();
+		int key = request.getWritekey();
+	
+		if (!isIndexValid(proposedIndex)) {
+			rejectCommit(responseObserver, request, proposedIndex);
+			return;
+		}
+	
+		preparePaxos(proposedIndex, key, request.getWriteval());
+	
+		if (server_state.i_am_leader) {
+			handleLeaderRole(proposedIndex, request, responseObserver);
+		} else {
+			System.out.println("Rejecting commit request: Not the leader.");
+		}
+	}
 
-        int proposedIndex = ++sequenceCounter;
-        int key = request.getWritekey();
 
-        // Check if the proposed index is less than or equal to the promised index
-        if (proposedIndex <= server_state.promisedIndex) {
-            System.out.println("Rejecting commit request: proposed index " + proposedIndex + " is not greater than promised index " + server_state.promisedIndex);
-            DadkvsMain.CommitReply response = DadkvsMain.CommitReply.newBuilder()
-                .setReqid(request.getReqid())
-                .setAck(false) // Reject
-                .build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
-            return;
-        }
+	// committx helper functions below
+	
+	// Generate a new proposed index for this Paxos instance
+	private int getProposedIndex() {
+		return ++sequenceCounter;
+	}
+	
+	// Check if the proposed index is valid (i.e., greater than the promised index)
+	private boolean isIndexValid(int proposedIndex) {
+		return proposedIndex > server_state.promisedIndex;
+	}
+	
+	// Handle rejection of a commit request due to invalid index
+	private void rejectCommit(StreamObserver<DadkvsMain.CommitReply> responseObserver,
+			DadkvsMain.CommitRequest request, int proposedIndex) {
 
-        this.paxosIndex = proposedIndex; 
-        int proposalTimestamp = this.timestamp + 1;
-        System.out.println("Starting Paxos instance for proposed index: " + proposedIndex + " with timestamp: " + proposalTimestamp);
+		System.out.println(
+				"Rejecting commit request: proposed index " +
+				proposedIndex + " is not greater than promised index " +
+				server_state.promisedIndex
+		);
 
-        paxosManager.startPaxosInstance(proposedIndex, key, proposalTimestamp, request.getWriteval());
-
-        if (server_state.i_am_leader) {
-            int totalServers = server_state.n_servers;
-            int majority = (totalServers / 2) + 1;
-
-            // Phase 1: Prepare
-            System.out.println("Leader assigned Paxos Instance number: " + proposedIndex);
-            DadkvsPaxos.PhaseOneRequest phaseOneRequest = DadkvsPaxos.PhaseOneRequest.newBuilder()
-                .setPhase1Config(0)
-                .setPhase1Index(proposedIndex)
-                .setPhase1Timestamp(proposalTimestamp)
-                .build();
-
-            int acceptCountPhase1 = 1; // Include leader's own acceptance
-            int rejectCountPhase1 = 0;
-
-            for (ManagedChannel channel : server_state.followerChannels) {
-                DadkvsPaxosServiceGrpc.DadkvsPaxosServiceBlockingStub stub = DadkvsPaxosServiceGrpc.newBlockingStub(channel);
-                DadkvsPaxos.PhaseOneReply ack;
-                try {
-                    ack = stub.phaseone(phaseOneRequest);
-                } catch (Exception e) {
-                    System.err.println("Error during Phase 1 request to follower: " + e.getMessage());
-                    rejectCountPhase1++;
-                    continue;
-                }
-
-                if (ack.getPhase1Accepted()) {
-                    System.out.println("Follower accepted Phase 1 for index: " + proposedIndex);
-                    acceptCountPhase1++;
-                } else {
-                    System.out.println("Follower rejected Phase 1 for index: " + proposedIndex);
-                    rejectCountPhase1++;
-                }
-            }
-
-            if (acceptCountPhase1 >= majority) {
-                server_state.promisedIndex = proposedIndex;
-                System.out.println("Majority accepted Phase 1. Proceeding to Phase 2.");
-
-                // Phase 2: Accept
-                DadkvsPaxos.PhaseTwoRequest phaseTwoRequest = DadkvsPaxos.PhaseTwoRequest.newBuilder()
-                    .setPhase2Config(0)
-                    .setPhase2Index(proposedIndex)
-                    .setPhase2Value(request.getWriteval())
-                    .setPhase2Timestamp(proposalTimestamp)
-                    .build();
-
-                int acceptCountPhase2 = 1; // Include leader's own acceptance
-                int rejectCountPhase2 = 0;
-
-                for (ManagedChannel channel : server_state.followerChannels) {
-                    DadkvsPaxosServiceGrpc.DadkvsPaxosServiceBlockingStub stub = DadkvsPaxosServiceGrpc.newBlockingStub(channel);
-                    DadkvsPaxos.PhaseTwoReply ack;
-                    try {
-                        ack = stub.phasetwo(phaseTwoRequest);
-                    } catch (Exception e) {
-                        System.err.println("Error during Phase 2 request to follower: " + e.getMessage());
-                        rejectCountPhase2++;
-                        continue;
-                    }
-
-                    if (ack.getPhase2Accepted()) {
-                        System.out.println("Follower accepted Phase 2 for index: " + proposedIndex);
-                        acceptCountPhase2++;
-                    } else {
-                        System.out.println("Follower rejected Phase 2 for index: " + proposedIndex);
-                        rejectCountPhase2++;
-                    }
-                }
-
-                if (acceptCountPhase2 >= majority) {
-                    System.out.println("Majority accepted Phase 2. Proceeding to learning.");
-
-                    // Learning Phase
-                    DadkvsPaxos.LearnRequest learnRequest = DadkvsPaxos.LearnRequest.newBuilder()
-                        .setLearnconfig(0)
-                        .setLearnindex(proposedIndex)
-                        .setLearntimestamp(proposalTimestamp)
-                        .setLearnvalue(request.getWriteval())
-                        .build();
-
-                    // Send learn requests to followers
-                    for (ManagedChannel channel : server_state.followerChannels) {
-                        DadkvsPaxosServiceGrpc.DadkvsPaxosServiceBlockingStub stub = DadkvsPaxosServiceGrpc.newBlockingStub(channel);
-                        try {
-                            stub.learn(learnRequest);
-                            System.out.println("Sent learn request to follower for index: " + proposedIndex);
-                        } catch (Exception e) {
-                            System.err.println("Error during Learn request to follower: " + e.getMessage());
-                        }
-                    }
-
-                    // Committing the transaction
-                    boolean result = processCommit(request);
-
-                    // Send commit to followers
-                    int acceptCountCommit = 1; // Include leader
-                    int rejectCountCommit = 0;
-
-                    for (ManagedChannel channel : server_state.followerChannels) {
-                        DadkvsMainServiceGrpc.DadkvsMainServiceBlockingStub stub = DadkvsMainServiceGrpc.newBlockingStub(channel);
-                        DadkvsMain.SequenceAck ack;
-                        try {
-                            ack = stub.sequenceCommit(request);
-                            if (ack.getAccepted()) {
-                                acceptCountCommit++;
-                            } else {
-                                rejectCountCommit++;
-                            }
-                        } catch (Exception e) {
-                            System.err.println("Error during commit request to follower: " + e.getMessage());
-                            rejectCountCommit++;
-                        }
-                    }
-
-                    if (acceptCountCommit >= majority) {
-                        System.out.println("Majority accepted the commit. Transaction committed.");
-                        DadkvsMain.CommitReply response = DadkvsMain.CommitReply.newBuilder()
-                            .setReqid(request.getReqid())
-                            .setAck(result)
-                            .build();
-
-                        responseObserver.onNext(response);
-                        responseObserver.onCompleted();
-                    } else {
-                        System.out.println("Rejecting commit request: Commit not accepted by majority.");
-                        sendRejection(responseObserver, request);
-                    }
-
-                } else {
-                    // If Phase 2 was not accepted by majority
-                    System.out.println("Rejecting commit request: Phase 2 not accepted by majority.");
-                    sendRejection(responseObserver, request);
-                }
-            } else {
-                // If Phase 1 was not accepted by majority
-                System.out.println("Rejecting commit request: Phase 1 not accepted by majority.");
-                sendRejection(responseObserver, request);
-            }
-        } else {
-            // If not the leader, reject the commit request
-            System.out.println("Rejecting commit request: Not the leader.");
-        }
-    }
-
-    
-    private void sendRejection(StreamObserver<DadkvsMain.CommitReply> responseObserver, DadkvsMain.CommitRequest request) {
-        checkFreeze();
-		
 		DadkvsMain.CommitReply response = DadkvsMain.CommitReply.newBuilder()
-            .setReqid(request.getReqid())
-            .setAck(false) // Rejeita
-            .build();
-    
-        responseObserver.onNext(response);
-        responseObserver.onCompleted();
-    }
+			.setReqid(request.getReqid())
+			.setAck(false) // Reject
+			.build();
 
-    @Override
-    public void sequenceCommit(DadkvsMain.CommitRequest request, StreamObserver<DadkvsMain.SequenceAck> responseObserver) {        // Follower processes the sequenced request sent by the leader
-        checkFreeze();
+		responseObserver.onNext(response);
+		responseObserver.onCompleted();
+	}
+	
+	// Prepare Paxos for a new transaction by starting a new instance
+	private void preparePaxos(int proposedIndex, int key, int writeVal) {
+
+		this.paxosIndex = proposedIndex;
+		int proposalTimestamp = this.timestamp + 1;
+
+		System.out.println(
+				"Starting Paxos instance for proposed index: " +
+				proposedIndex + " with timestamp: " +
+				proposalTimestamp
+		);
+
+		paxosManager.startPaxosInstance(proposedIndex, key, proposalTimestamp, writeVal);
+	}
+	
+	// Handle the role of the leader during Paxos phases
+	private void handleLeaderRole(int proposedIndex, DadkvsMain.CommitRequest request,
+			StreamObserver<DadkvsMain.CommitReply> responseObserver) {
+
+		int majority = (server_state.n_servers / 2) + 1;
+	
+		// Phase 1: Prepare
+		if (performPhaseOne(proposedIndex, majority)) {
+			// Phase 2: Accept
+			if (performPhaseTwo(proposedIndex, request.getWriteval(), majority)) {
+				// Commit and learn
+				processAndCommitTransaction(proposedIndex, request, responseObserver, majority);
+			} else {
+				sendRejection(responseObserver, request,
+						"Phase 2 not accepted by majority.");
+			}
+		} else {
+			sendRejection(responseObserver, request, "Phase 1 not accepted by majority.");
+		}
+	}
+	
+	// Perform Phase 1 of Paxos protocol (Prepare phase)
+	private boolean performPhaseOne(int proposedIndex, int majority) {
+
+		System.out.println("Leader assigned Paxos Instance number: " + proposedIndex);
+		DadkvsPaxos.PhaseOneRequest phaseOneRequest = createPhaseOneRequest(proposedIndex);
+	
+		int acceptCount = 1;
+		int rejectCount = 0;
+	
+		for (ManagedChannel channel : server_state.followerChannels) {
+
+			DadkvsPaxosServiceGrpc.DadkvsPaxosServiceBlockingStub stub =
+					DadkvsPaxosServiceGrpc.newBlockingStub(channel);
+
+			try {
+				if (stub.phaseone(phaseOneRequest).getPhase1Accepted()) {
+					System.out.println("Follower accepted Phase 1 for index: " + proposedIndex);
+					acceptCount++;
+				} else {
+					rejectCount++;
+				}
+			} catch (Exception e) {
+				System.err.println("Error during Phase 1 request: " + e.getMessage());
+				rejectCount++;
+			}
+		}
+	
+		return acceptCount >= majority;
+	}
+	
+	// Create Phase 1 request for Paxos protocol
+	private DadkvsPaxos.PhaseOneRequest createPhaseOneRequest(int proposedIndex) {
+		int proposalTimestamp = this.timestamp + 1;
+		return DadkvsPaxos.PhaseOneRequest.newBuilder()
+			.setPhase1Config(0)
+			.setPhase1Index(proposedIndex)
+			.setPhase1Timestamp(proposalTimestamp)
+			.build();
+	}
+	
+	// Perform Phase 2 of Paxos protocol (Accept phase)
+	private boolean performPhaseTwo(int proposedIndex, int writeVal, int majority) {
+
+		System.out.println("Proceeding to Phase 2 for index: " + proposedIndex);
+
+		DadkvsPaxos.PhaseTwoRequest phaseTwoRequest =
+				createPhaseTwoRequest(proposedIndex, writeVal);
+	
+		int acceptCount = 1;
+		int rejectCount = 0;
+	
+		for (ManagedChannel channel : server_state.followerChannels) {
+
+			DadkvsPaxosServiceGrpc.DadkvsPaxosServiceBlockingStub stub =
+					DadkvsPaxosServiceGrpc.newBlockingStub(channel);
+
+			try {
+				if (stub.phasetwo(phaseTwoRequest).getPhase2Accepted()) {
+					System.out.println("Follower accepted Phase 2 for index: " + proposedIndex);
+					acceptCount++;
+				} else {
+					rejectCount++;
+				}
+			} catch (Exception e) {
+				System.err.println("Error during Phase 2 request: " + e.getMessage());
+				rejectCount++;
+			}
+		}
+	
+		return acceptCount >= majority;
+	}
+
+	// Perform Phase 2 of Paxos protocol (Accept phase)
+	private boolean performCommitPhase(DadkvsMain.CommitRequest request, int majority) {
+
+		int acceptCountCommit = 1; // Include leader
+		int rejectCountCommit = 0;
+
+		for (ManagedChannel channel : server_state.followerChannels) {
+
+			DadkvsMainServiceGrpc.DadkvsMainServiceBlockingStub stub =
+					DadkvsMainServiceGrpc.newBlockingStub(channel);
+
+			DadkvsMain.SequenceAck ack;
+			try {
+				ack = stub.sequenceCommit(request);
+				if (ack.getAccepted()) {
+					acceptCountCommit++;
+				} else {
+					rejectCountCommit++;
+				}
+			} catch (Exception e) {
+				System.err.println(
+						"Error during commit request to follower: " + e.getMessage());
+
+				rejectCountCommit++;
+			}
+		}
+
+		return acceptCountCommit >= majority;
+	}
+	
+	// Create Phase 2 request for Paxos protocol
+	private DadkvsPaxos.PhaseTwoRequest createPhaseTwoRequest(int proposedIndex, int writeVal) {
+		int proposalTimestamp = this.timestamp + 1;
+		return DadkvsPaxos.PhaseTwoRequest.newBuilder()
+			.setPhase2Config(0)
+			.setPhase2Index(proposedIndex)
+			.setPhase2Value(writeVal)
+			.setPhase2Timestamp(proposalTimestamp)
+			.build();
+	}
+	
+	// Process commit and send learn request to followers
+	private void processAndCommitTransaction(int proposedIndex, DadkvsMain.CommitRequest request,
+			StreamObserver<DadkvsMain.CommitReply> responseObserver, int majority) {
+
+		System.out.println("Majority accepted Phase 2. Proceeding to learning.");
+	
+		sendLearnRequests(proposedIndex, request.getWriteval());
+	
+		if (processCommit(request) && performCommitPhase(request, majority)) {
+			System.out.println("Transaction committed.");
+			sendCommitResponse(responseObserver, request, true);
+		} else {
+			sendRejection(responseObserver, request, "Commit not accepted by majority.");
+		}
+	}
+	
+	// Send learn requests to followers after Phase 2
+	private void sendLearnRequests(int proposedIndex, int writeVal) {
+		DadkvsPaxos.LearnRequest learnRequest = createLearnRequest(proposedIndex, writeVal);
+	
+		for (ManagedChannel channel : server_state.followerChannels) {
+
+			DadkvsPaxosServiceGrpc.DadkvsPaxosServiceBlockingStub stub =
+					DadkvsPaxosServiceGrpc.newBlockingStub(channel);
+
+			try {
+				stub.learn(learnRequest);
+				System.out.println("Sent learn request to follower for index: " + proposedIndex);
+			} catch (Exception e) {
+				System.err.println("Error during learn request: " + e.getMessage());
+			}
+		}
+	}
+	
+	// Create learn request for Paxos protocol
+	private DadkvsPaxos.LearnRequest createLearnRequest(int proposedIndex, int writeVal) {
+		return DadkvsPaxos.LearnRequest.newBuilder()
+			.setLearnconfig(0)
+			.setLearnindex(proposedIndex)
+			.setLearntimestamp(this.timestamp + 1)
+			.setLearnvalue(writeVal)
+			.build();
+	}
+	
+	// Send the final commit response to the client
+	private void sendCommitResponse(StreamObserver<DadkvsMain.CommitReply> responseObserver,
+			DadkvsMain.CommitRequest request, boolean result) {
+
+		DadkvsMain.CommitReply response = DadkvsMain.CommitReply.newBuilder()
+			.setReqid(request.getReqid())
+			.setAck(result)
+			.build();
+
+		responseObserver.onNext(response);
+		responseObserver.onCompleted();
+	}
+	
+	// Send rejection response to the client
+	private void sendRejection(StreamObserver<DadkvsMain.CommitReply> responseObserver,
+			DadkvsMain.CommitRequest request, String reason) {
+
+		System.out.println("Rejecting commit request: " + reason);
+		DadkvsMain.CommitReply response = DadkvsMain.CommitReply.newBuilder()
+			.setReqid(request.getReqid())
+			.setAck(false) // Reject
+			.build();
+		responseObserver.onNext(response);
+		responseObserver.onCompleted();
+	}
+
+	// Follower processes the sequenced request sent by the leader
+	@Override
+	public void sequenceCommit(DadkvsMain.CommitRequest request,
+			StreamObserver<DadkvsMain.SequenceAck> responseObserver) {
+
+		checkFreeze();
 		
 		//System.out.println("Follower received sequence request: " + request.getSequenceNumber());
 
-        // Process the commit request (assume it is accepted for simplicity)
-        boolean accepted = processCommit(request); // Apply the commit in sequence
+		// Process the commit request (assume it is accepted for simplicity)
+		boolean accepted = processCommit(request); // Apply the commit in sequence
 
-        // Respond to the leader with an acknowledgment
-        DadkvsMain.SequenceAck ack = DadkvsMain.SequenceAck.newBuilder()
-                .setSequenceNumber(this.paxosIndex)
-                .setAccepted(accepted)
-                .build();
+		// Respond to the leader with an acknowledgment
+		DadkvsMain.SequenceAck ack = DadkvsMain.SequenceAck.newBuilder()
+				.setSequenceNumber(this.paxosIndex)
+				.setAccepted(accepted)
+				.build();
 
-        responseObserver.onNext(ack);
-        responseObserver.onCompleted();
-    }
+		responseObserver.onNext(ack);
+		responseObserver.onCompleted();
+	}
 
-    /**
-     * Helper function to process commit requests. This function is used by both the leader and followers.
-     * 
-     * @param request CommitRequest containing the transaction information
-     * @return boolean indicating whether the commit was successful or not
-     */
-    private boolean processCommit(DadkvsMain.CommitRequest request) {
-        checkFreeze();
+	/**
+	 * Helper function to process commit requests. This function is used by both the leader and followers.
+	 * 
+	 * @param request CommitRequest containing the transaction information
+	 * @return boolean indicating whether the commit was successful or not
+	 */
+	private boolean processCommit(DadkvsMain.CommitRequest request) {
+		checkFreeze();
 		
 		int key1 = request.getKey1();
-        int version1 = request.getVersion1();
-        int key2 = request.getKey2();
-        int version2 = request.getVersion2();
-        int writekey = request.getWritekey();
-        int writeval = request.getWriteval();
+		int version1 = request.getVersion1();
+		int key2 = request.getKey2();
+		int version2 = request.getVersion2();
+		int writekey = request.getWritekey();
+		int writeval = request.getWriteval();
 
-        // Increment timestamp for the commit
-        this.timestamp++;
+		// Increment timestamp for the commit
+		this.timestamp++;
 
-        // Create a transaction record with the provided information
-        TransactionRecord txrecord = new TransactionRecord(key1, version1, key2, version2, writekey, writeval, this.timestamp);
+		// Create a transaction record with the provided information
+		TransactionRecord txrecord = new TransactionRecord(
+				key1,
+				version1,
+				key2,
+				version2,
+				writekey,
+				writeval,
+				this.timestamp
+			);
 
-        // Attempt to commit the transaction in the key-value store
-        return this.server_state.store.commit(txrecord);
-    }
+		// Attempt to commit the transaction in the key-value store
+		return this.server_state.store.commit(txrecord);
+	}
+
+	// End of committx helper functions
+
 
 	// Add an override for `executeDebugMode` to handle unfreezing
 	public void executeDebugMode(DebugMode debugMode) {
@@ -302,4 +409,3 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 		}
 	}
 }
- 
