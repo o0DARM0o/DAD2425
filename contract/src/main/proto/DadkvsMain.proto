@@ -34,8 +34,8 @@ message CommitReply {
 
 // The message that the leader sends to replicas with the sequence number
 message SequencedRequest {
-  int32 sequence_number = 1;  // Sequence number assigned by the leader
-  CommitRequest commit = 2;   // The client commit request
+  CommitRequest commit = 1;   // The client commit request
+  int32 timestamp = 2;
 }
 
 // The follower's acknowledgment message after processing the sequenced request
@@ -50,6 +50,6 @@ service DadkvsMainService {
   rpc committx (CommitRequest) returns (CommitReply);
 
   // New RPCs for leader-follower coordination
-  rpc sequenceCommit (CommitRequest) returns (SequenceAck);
+  rpc sequenceCommit (SequencedRequest) returns (SequenceAck);
 }
 

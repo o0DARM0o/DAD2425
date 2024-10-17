@@ -25,7 +25,7 @@ public class DadkvsServerState {
     MainLoop       main_loop;
     Thread         main_loop_worker;
     List<ManagedChannel> followerChannels;  // Channels to communicate with follower servers
-    int promisedIndex;
+    int promisedTimestap;
     int config;
     int current_leader_id;
     boolean leader_alive;  // Track whether the leader is alive
@@ -33,13 +33,15 @@ public class DadkvsServerState {
     private final Object electionLock = new Object(); 
     boolean isInElection = false;
 
+    PaxosManager paxosManager;
+
 	DadkvsMainServiceImpl mainServiceImpl = null;
 	DadkvsPaxosServiceImpl paxosServiceImpl = null;
 	private final Object freezeLock = new Object(); // Lock object for freeze/unfreeze mechanism
 
     int n_servers;
 
-    public int acceptedProposalNumber; // Highest accepted proposal number
+    public int acceptedProposalTimestamp = -1; // Highest accepted proposal number
     public int acceptedValue = -1; 
     
     /**
@@ -51,7 +53,7 @@ public class DadkvsServerState {
      * @param myself  Server's ID
      * @param leader  Indicates whether this server starts as the leader
      */
-    public DadkvsServerState(int kv_size, int port, int myself, boolean leader) {
+    public DadkvsServerState(int kv_size, int port, int myself, boolean leader, PaxosManager paxosManager1) {
 	server = null;
 	base_port = port;
 	my_id = myself;
@@ -66,8 +68,9 @@ public class DadkvsServerState {
 	main_loop = new MainLoop(this);
 	main_loop_worker = new Thread (main_loop);
 	main_loop_worker.start();
-    promisedIndex = -1;
+    promisedTimestap = -1;
     config = 0;
+    this.paxosManager = paxosManager1;
 
     n_servers = 5;
 
@@ -81,6 +84,7 @@ public class DadkvsServerState {
 			System.out.println("[new DadkvsServerState]: something went wrong");
 		}
         startHeartbeat();
+        paxosManager.startCommitThread();
 	} else {
         monitorLeader();
     }
@@ -197,6 +201,7 @@ public class DadkvsServerState {
                 current_leader_id = leaderId;
                 reinitializeFollowerChannels();  // Reinitialize channels for the new leader
                 startHeartbeat();  // Start sending heartbeats as the new leader
+                paxosManager.startCommitThread();
             } else if(leaderId > current_leader_id && this.i_am_leader) {
                 current_leader_id = leaderId;
                 this.i_am_leader = false;
@@ -250,6 +255,7 @@ public class DadkvsServerState {
             current_leader_id = current_leader;
             reinitializeFollowerChannels();  // Reinitialize channels for the new leader
             startHeartbeat();  // Start sending heartbeats as the new leader
+            paxosManager.startCommitThread();
         } else {
 			current_leader_id++;
             i_am_leader = false;

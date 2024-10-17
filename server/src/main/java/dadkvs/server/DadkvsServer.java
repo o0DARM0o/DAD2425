@@ -6,7 +6,6 @@ import io.grpc.ServerBuilder;
 
 import dadkvs.DadkvsMain;
 import dadkvs.DadkvsMainServiceGrpc;
-import dadkvs.util.PaxosManager;
 
 
 public class DadkvsServer {
@@ -41,13 +40,15 @@ public class DadkvsServer {
 	System.out.println("ID atribuido: " + my_id);
 	boolean isLeader = (my_id == 0);
 	
-	server_state = new DadkvsServerState(kvsize, base_port, my_id,  isLeader);
+	server_state = new DadkvsServerState(kvsize, base_port, my_id,  isLeader, paxosManager);
+	paxosManager.setServer_state(server_state);
 	
 	port = base_port + my_id;
 
 	final BindableService service_impl = new DadkvsMainServiceImpl(server_state, paxosManager);
 	final BindableService console_impl = new DadkvsConsoleServiceImpl(server_state);
 	final BindableService paxos_impl   = new DadkvsPaxosServiceImpl(server_state, paxosManager);
+	
 	
 	// Create a new server to listen on port.
 	Server server = ServerBuilder.forPort(port).addService(service_impl).addService(console_impl).addService(paxos_impl).build();
