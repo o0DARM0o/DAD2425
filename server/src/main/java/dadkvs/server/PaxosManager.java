@@ -1,14 +1,11 @@
 package dadkvs.server;
 
 import java.util.concurrent.ConcurrentHashMap;
-
 import java.util.*;
-
-import dadkvs.DadkvsConsoleServiceGrpc.DadkvsConsoleServiceImplBase;
-import io.grpc.BindableService;
 
 
  public class PaxosManager {
+
     private Map<Integer, PaxosInstance> instances;
     private int commitIndex;  // Tracks the next instance that can be committed
     private final Object commitLock = new Object();  // Lock to ensure ordered commits
@@ -34,7 +31,9 @@ import io.grpc.BindableService;
  
     public void startPaxosInstance(int index, int key, int proposalTimestamp, int proposalValue) {
         // Create a new Paxos instance or retrieve existing one
-        PaxosInstance instance = instances.getOrDefault(index, new PaxosInstance(key, -1, -1, proposalTimestamp, proposalValue));
+        PaxosInstance instance = instances.getOrDefault(index, new PaxosInstance(
+				key, -1, -1, proposalTimestamp, proposalValue));
+
         instances.put(index, instance);
         
     }
@@ -75,7 +74,14 @@ import io.grpc.BindableService;
             if (instance != null && instance.isReadyToCommit()) {
                 // Commit logic
                 System.out.println("Committing instance: " + instanceId);
-                this.service_impl.doCommit(instanceId, instance.getRequest(), instance.getObserver(), (service_impl.server_state.n_servers / 2) + 1, instance.getAcceptedTimestamp());
+
+                this.service_impl.doCommit(
+						instanceId,
+						instance.getRequest(),
+						instance.getObserver(),
+						(service_impl.server_state.n_servers / 2) + 1,
+						instance.getAcceptedTimestamp()
+				);
 
                 // Update commit index
                 instance.setCommited(true);
@@ -88,13 +94,21 @@ import io.grpc.BindableService;
     public void startCommitThread() {
         new Thread(() -> {
             System.out.println("STARTED COMMIT THREAD!!!");
-            while (this.server_state.i_am_leader) {
+            while (this.server_state.i_am_leader.get()) {
                 synchronized (commitLock) {
-                    for (Iterator<Map.Entry<Integer, PaxosInstance>> it = instances.entrySet().iterator(); it.hasNext();) {
+                    for (Iterator<Map.Entry<Integer, PaxosInstance>> it = 
+							instances.entrySet().iterator(); it.hasNext();) {
+
                         Map.Entry<Integer, PaxosInstance> entry = it.next();
                         PaxosInstance instance = entry.getValue();
                         if(!instance.isCommited()) {
-                            this.service_impl.handleLeaderRole(instance.getIndex(), instance.getRequest(), instance.getObserver());
+
+                            this.service_impl.handleLeaderRole(
+									instance.getIndex(),
+									instance.getRequest(),
+									instance.getObserver()
+							);
+
                             commitInstance(instance.getIndex());
                             it.remove();
                         }

@@ -8,73 +8,77 @@ import io.grpc.stub.StreamObserver;
 
 public class DadkvsConsoleServiceImpl extends DadkvsConsoleServiceGrpc.DadkvsConsoleServiceImplBase {
 
-    
-    DadkvsServerState server_state;
+	DadkvsServerState server_state;
 
-    public DadkvsConsoleServiceImpl(DadkvsServerState state) {
+	public DadkvsConsoleServiceImpl(DadkvsServerState state) {
 	this.server_state = state;
-    }
-
-    @Override
-    public void setleader(DadkvsConsole.SetLeaderRequest request, StreamObserver<DadkvsConsole.SetLeaderReply> responseObserver) {
-	// for debug purposes
-	System.out.println(request);
-
-	boolean response_value = true;
-	boolean was_i_leader = this.server_state.i_am_leader;
-	this.server_state.i_am_leader = request.getIsleader();
-	System.out.println("i_am_leader = " + this.server_state.i_am_leader);
-	if (was_i_leader == false && this.server_state.i_am_leader == true) {
-		server_state.current_leader_id = server_state.my_id;
-		server_state.reinitializeFollowerChannels();  // Reinitialize channels for the new leader
-		server_state.startHeartbeat();  // Start sending heartbeats as the new leader
 	}
 
-	// for debug purposes
-	System.out.println("I am the leader = " + this.server_state.i_am_leader );
+	@Override
+	public void setleader(DadkvsConsole.SetLeaderRequest request,
+			StreamObserver<DadkvsConsole.SetLeaderReply> responseObserver) {
+
+		// for debug purposes
+		System.out.println(request);
+
+		boolean response_value = true;
+		boolean was_i_leader = this.server_state.i_am_leader.get();
+		this.server_state.i_am_leader.set(request.getIsleader());
+		System.out.println("i_am_leader = " + this.server_state.i_am_leader);
+		if (!was_i_leader && this.server_state.i_am_leader.get()) {
+			server_state.current_leader_id.set(server_state.my_id);
+			// Reinitialize channels for the new leader
+			server_state.reinitializeFollowerChannels();
+			server_state.startHeartbeat();  // Start sending heartbeats as the new leader
+		}
+
+		// for debug purposes
+		System.out.println("I am the leader = " + this.server_state.i_am_leader );
 
 
-	this.server_state.main_loop.wakeup();
-	
-	DadkvsConsole.SetLeaderReply response =DadkvsConsole.SetLeaderReply.newBuilder()
-	    .setIsleaderack(response_value).build();
-	
-	responseObserver.onNext(response);
-       	responseObserver.onCompleted();
-    }
-
-    @Override
-    public void setdebug(DadkvsConsole.SetDebugRequest request, StreamObserver<DadkvsConsole.SetDebugReply> responseObserver) {
-	// for debug purposes
-	System.out.println(request);
-	
-	boolean response_value = false;
-	int DebugModeIndex = request.getMode();
-	DebugMode debugMode = null;
-	// Get debug mode
-	try {
-		debugMode = DebugMode.values()[DebugModeIndex];
-		this.server_state.new_debug_mode = debugMode;
-		response_value = true;
-	} catch (ArrayIndexOutOfBoundsException e) {
-		System.out.println("Invalid debug mode: " + DebugModeIndex);
+		this.server_state.main_loop.wakeup();
+		
+		DadkvsConsole.SetLeaderReply response =DadkvsConsole.SetLeaderReply.newBuilder()
+			.setIsleaderack(response_value).build();
+		
+		responseObserver.onNext(response);
+		responseObserver.onCompleted();
 	}
 
-	this.server_state.main_loop.wakeup();
+	@Override
+	public void setdebug(DadkvsConsole.SetDebugRequest request,
+			StreamObserver<DadkvsConsole.SetDebugReply> responseObserver) {
 
-	// for debug purposes
-	System.out.println("Setting debug mode to = " + this.server_state.new_debug_mode);
+		// for debug purposes
+		System.out.println(request);
+		
+		boolean response_value = false;
+		int DebugModeIndex = request.getMode();
+		DebugMode debugMode = null;
+		// Get debug mode
+		try {
+			debugMode = DebugMode.values()[DebugModeIndex];
+			this.server_state.new_debug_mode = debugMode;
+			response_value = true;
+		} catch (ArrayIndexOutOfBoundsException e) {
+			System.out.println("Invalid debug mode: " + DebugModeIndex);
+		}
 
-	DadkvsConsole.SetDebugReply response =DadkvsConsole.SetDebugReply.newBuilder()
-	    .setAck(response_value).build();
-	
-	responseObserver.onNext(response);
-	responseObserver.onCompleted();
+		this.server_state.main_loop.wakeup();
 
-	if (debugMode == DebugMode.CRASH) {
-		crash_server();
+		// for debug purposes
+		System.out.println("Setting debug mode to = " + this.server_state.new_debug_mode);
+
+		DadkvsConsole.SetDebugReply response =DadkvsConsole.SetDebugReply.newBuilder()
+			.setAck(response_value).build();
+		
+		responseObserver.onNext(response);
+		responseObserver.onCompleted();
+
+		if (debugMode == DebugMode.CRASH) {
+			crash_server();
+		}
 	}
-    }
 
 	private void crash_server() {
 		this.server_state.server.shutdown();
