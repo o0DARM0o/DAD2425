@@ -21,6 +21,7 @@ public class PaxosManager {
 	final private ManagedChannel[] channels;
 
 	final private PaxosInstanceIndex paxosInstanceIndex;
+	final private AtomicInteger leaderInstanceIndex;
 	final private AtomicInteger lastLearnedPaxosInstanceIndex;
 	final private AtomicInteger my_current_id;
 
@@ -39,12 +40,13 @@ public class PaxosManager {
 	public PaxosManager(DadkvsServerState serverState) {
 		this.channels = initializeChannels(serverState.base_port);
 
-		this.paxosInstanceIndex = new PaxosInstanceIndex(new AtomicInteger(-1),
-				replicaPaxosManagers);
-
 		this.lastLearnedPaxosInstanceIndex = new AtomicInteger(-1);
+		this.leaderInstanceIndex = new AtomicInteger(-1);
 		this.my_current_id = serverState.my_current_id;
 		this.paxosValueCollector = new PaxosValueCollector(serverState);
+
+		this.paxosInstanceIndex = new PaxosInstanceIndex(new AtomicInteger(-1),
+				paxosValueCollector, replicaPaxosManagers);
 	}
 
 	private static ManagedChannel[] initializeChannels(int base_port) {
@@ -64,7 +66,9 @@ public class PaxosManager {
 
 	public int startPaxosInstance(TransactionRecord tr) {
 		synchronized (startPaxosInstanceLock) {
-			final int newPaxosInstanceIndex = paxosInstanceIndex.incrementAndGet();
+			final int newPaxosInstanceIndex = leaderInstanceIndex.incrementAndGet();
+			paxosInstanceIndex.setIfHigherPaxosInstanceIndex(newPaxosInstanceIndex);
+			System.out.println("[startPaxosInstance]: " + newPaxosInstanceIndex);
 			final ProposalVector proposal_vector = ProposalVectorUtils.createProposalVector(
 					my_current_id.get(),
 					newPaxosInstanceIndex,
@@ -74,7 +78,7 @@ public class PaxosManager {
 			final PaxosInstance final_paxos_instance = runPaxosStateMachine(tr, proposal_vector);
 
 			if (final_paxos_instance instanceof RejectedPaxosInstance) {
-				paxosValueCollector.addPaxosValue(final_paxos_instance.paxosValue);
+				return -1;
 			}
 			return newPaxosInstanceIndex;
 		}

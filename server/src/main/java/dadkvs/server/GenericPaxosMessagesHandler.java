@@ -160,9 +160,7 @@ public class GenericPaxosMessagesHandler<T, R> {
 			
 			if (hasAcceptanceMajority()) {
 				return MessageResultEnum.ACCEPTED;
-			} else if (hasRejectionMajority()) {
-				return MessageResultEnum.TIMED_OUT;
-			} else if (reject_timeout) {
+			} else if (hasRejectionMajority() || reject_timeout) {
 				return MessageResultEnum.REJECTED;
 			} else {
 				return MessageResultEnum.TIMED_OUT;

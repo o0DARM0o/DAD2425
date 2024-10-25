@@ -11,17 +11,22 @@ import dadkvs.DadkvsPaxos.PhaseTwoRequest;
 import dadkvs.DadkvsPaxos.ProposalVector;
 
 public class ReplicaPaxosManager {
+	private final PaxosValueCollector paxosValueCollector;
 
 	private ProposalVector prepareHighestProposalVector = null;
 	private ProposalVector promisedHighestProposalVector = null;
 	private PaxosValue mostRecentPaxosValue = null;
 
-	ReplicaPaxosManager() {
-
+	ReplicaPaxosManager(PaxosValueCollector paxosValueCollector) {
+		this.paxosValueCollector = paxosValueCollector;
 	}
 
 	synchronized PhaseOneReply getPrepareRequestReply(PhaseOneRequest prepareRequest) {
 		final ProposalVector new_proposal_vector = prepareRequest.getProposalVector();
+		if (alreadyLearned(new_proposal_vector)) {
+			createPrepareRequestReply(false);
+		}
+
 		if (ProposalVectorUtils.areProposalsEqual(prepareHighestProposalVector, new_proposal_vector)) {
 			System.err.println("[getPrepareRequestReply]: Expected different proposal vectors");
 			return createPrepareRequestReply(true);
@@ -54,6 +59,10 @@ public class ReplicaPaxosManager {
 
 	synchronized Entry<PhaseTwoReply, PaxosValue> getAcceptRequestReply(PhaseTwoRequest acceptRequest) {
 		final ProposalVector new_proposal_vector = acceptRequest.getProposalVector();
+		if (alreadyLearned(new_proposal_vector)) {
+			return createAcceptReplyTuple(false);
+		}
+
 		if (ProposalVectorUtils.areProposalsEqual(promisedHighestProposalVector, new_proposal_vector)) {
 			System.err.println("[getAcceptRequestReply]: Expected different proposal vectors");
 			return createAcceptReplyTuple(true);
@@ -92,5 +101,9 @@ public class ReplicaPaxosManager {
 						paxosValue.proposal_vector))
 				.setPhase2Accepted(was_accepted)
 				.build();
+	}
+
+	private boolean alreadyLearned(ProposalVector proposalVector) {
+		return paxosValueCollector.contains(proposalVector.getPaxosIndex());
 	}
 }

@@ -96,6 +96,7 @@ public class PaxosValueCollector  {
 		if (wasPaxosSuccessful.containsKey(paxos_index)) {
 			return wasPaxosSuccessful.get(paxos_index);
 		}
+
 		try {
 			synchronized (locks.get(paxos_index)) {
 				locks.get(paxos_index).wait();
@@ -109,5 +110,9 @@ public class PaxosValueCollector  {
 			System.err.println("[waitForCommit]: InterruptedException not expected");
 			return false;
 		}
-	} 
+	}
+
+	public boolean contains(int paxos_index) {
+		return collectedPaxosValues.containsKey(paxos_index);
+	}
 }

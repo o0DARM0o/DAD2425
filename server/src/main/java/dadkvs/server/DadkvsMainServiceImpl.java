@@ -78,6 +78,10 @@ public class DadkvsMainServiceImpl extends DadkvsMainServiceGrpc.DadkvsMainServi
 
 			final TransactionRecord tr = TransactionRecordUtils.createTransactionRecord(request);
 			final int paxos_instance_index = paxosManager.startPaxosInstance(tr);
+			if (paxos_instance_index < 0) {
+				sendCommitResponse(responseObserver, request, false);
+				return;
+			}
 			final boolean was_commit_successful = paxosManager.waitForCommit(paxos_instance_index);
 			sendCommitResponse(responseObserver, request, was_commit_successful);
 		}

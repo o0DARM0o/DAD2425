@@ -132,7 +132,7 @@ public class ProposalVectorUtils {
 		return String.format("<%d, %d, %d>",
 				proposalVector.getProposerId(),
 				proposalVector.getPaxosIndex(),
-				proposalVector.getProposerId()
+				proposalVector.getProposalNumber()
 		);
 	}
 }
