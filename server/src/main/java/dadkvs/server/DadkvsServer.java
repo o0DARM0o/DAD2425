@@ -8,11 +8,13 @@ import io.grpc.ServerBuilder;
 public class DadkvsServer {
 
 	static DadkvsServerState server_state;
+
+	static final int TOTAL_SERVERS = 5;
 									
 	/** Server host port. */
 	private static int port;
 
-	static PaxosManager paxosManager = new PaxosManager();
+	// static PaxosManager paxosManager = new PaxosManager();
 	
 	public static void main(String[] args) throws Exception {
 	final int kvsize = 1000;
@@ -37,11 +39,10 @@ public class DadkvsServer {
 	System.out.println("ID atribuido: " + my_id);
 	boolean isLeader = (my_id == 0);
 	
-	server_state = new DadkvsServerState(kvsize, base_port, my_id,  isLeader, paxosManager);
-	paxosManager.setServer_state(server_state);
+	server_state = new DadkvsServerState(kvsize, base_port, my_id,  isLeader);
 	
 	port = base_port + my_id;
-
+	final PaxosManager paxosManager = new PaxosManager(server_state);
 	final BindableService service_impl = new DadkvsMainServiceImpl(server_state, paxosManager);
 	final BindableService console_impl = new DadkvsConsoleServiceImpl(server_state);
 	final BindableService paxos_impl   = new DadkvsPaxosServiceImpl(server_state, paxosManager);

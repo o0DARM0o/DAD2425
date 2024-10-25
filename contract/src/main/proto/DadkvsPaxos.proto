@@ -4,44 +4,58 @@
 syntax = "proto3";
 package dadkvs;
 
+// Define the custom TransactionRecord message
+message TransactionRecord {
+  int32 read1_key      = 1;
+  int32 read1_version  = 2;
+  int32 read2_key      = 3;
+  int32 read2_version  = 4;
+  int32 write_key      = 5;
+  int32 write_value    = 6;
+  int32 req_id         = 7;
+}
+
+// Define the custom ProposalVector message
+message ProposalVector {
+  int32 proposer_id     = 1;
+  int32 paxos_index     = 2;
+  int32 proposal_number = 3;
+}
+
 message PhaseOneRequest {
-  int32 phase1config    = 1;
-  int32 phase1index     = 2;
-  int32 phase1timestamp = 3;
+  int32 phase1config             = 1;
+  ProposalVector proposal_vector = 2;
 }
 
 message PhaseOneReply {
-  int32 phase1config    = 1;
-  int32 phase1index     = 2;
-  bool  phase1accepted  = 3;
-  int32 phase1value     = 4;
-  int32 phase1timestamp = 5;
+  int32 phase1config                     = 1;
+  ProposalVector highest_proposal_vector = 2;
+  bool phase1accepted                    = 3;
+  TransactionRecord phase1value          = 4;  // Use TransactionRecord here
 }
 
 message PhaseTwoRequest {
-  int32 phase2config    = 1;
-  int32 phase2index     = 2;
-  int32 phase2value     = 3;
-  int32 phase2timestamp = 4;
+  int32 phase2config             = 1;
+  ProposalVector proposal_vector = 2;
+  TransactionRecord phase2value  = 3;  // Use TransactionRecord here
 }
 
 message PhaseTwoReply {
-  int32 phase2config   = 1;
-  int32 phase2index    = 2;
-  bool  phase2accepted = 3;
+  int32 phase2config                      = 1;
+  ProposalVector accepted_proposal_vector = 2;
+  bool  phase2accepted                    = 3;
 }
 
 message LearnRequest {
-  int32 learnconfig    = 1;
-  int32 learnindex     = 2;
-  int32 learnvalue     = 3;
-  int32 learntimestamp = 4;
+  int32 learnconfig              = 1;
+  ProposalVector proposal_vector = 2;
+  TransactionRecord learnvalue   = 3;  // Use TransactionRecord here
 }
 
 message LearnReply {
-  int32 learnconfig   = 1;
-  int32 learnindex    = 2;
-  bool  learnaccepted = 3;
+  int32 learnconfig                      = 1;
+  ProposalVector learned_proposal_vector = 2;
+  bool  learnaccepted                    = 3;
 }
 
 message HeartbeatRequest {
@@ -58,9 +72,3 @@ service DadkvsPaxosService {
   rpc learn (LearnRequest) returns (LearnReply);
   rpc heartbeat (HeartbeatRequest) returns (HeartbeatReply);
 }
-
-
-
-
-
-

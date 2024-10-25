@@ -33,23 +33,23 @@ message CommitReply {
 // New messages for sequencing
 
 // The message that the leader sends to replicas with the sequence number
-message SequencedRequest {
-  CommitRequest commit = 1;   // The client commit request
-  int32 timestamp = 2;
-}
+// message SequencedRequest {
+//   CommitRequest commit = 1;   // The client commit request
+//   int32 timestamp = 2;
+// }
 
-// The follower's acknowledgment message after processing the sequenced request
-message SequenceAck {
-  int32 sequence_number = 1;  // Acknowledging the specific sequence number
-  bool accepted = 2;          // Whether the follower accepted the request
-}
+// // The follower's acknowledgment message after processing the sequenced request
+// message SequenceAck {
+//   int32 sequence_number = 1;  // Acknowledging the specific sequence number
+//   bool accepted = 2;          // Whether the follower accepted the request
+// }
 
 
 service DadkvsMainService {
   rpc read (ReadRequest) returns (ReadReply);
   rpc committx (CommitRequest) returns (CommitReply);
 
-  // New RPCs for leader-follower coordination
-  rpc sequenceCommit (SequencedRequest) returns (SequenceAck);
+//   // New RPCs for leader-follower coordination
+//   rpc sequenceCommit (SequencedRequest) returns (SequenceAck);
 }
 

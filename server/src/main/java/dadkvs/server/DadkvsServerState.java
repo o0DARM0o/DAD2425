@@ -17,11 +17,12 @@ import io.grpc.Server;
 
 public class DadkvsServerState {
 	Server		   server;
-	AtomicBoolean  i_am_leader = new AtomicBoolean();
+	final AtomicBoolean  i_am_leader = new AtomicBoolean();
 	DebugMode      old_debug_mode;
 	DebugMode      new_debug_mode;
 	int            base_port;
 	final int      my_id;
+	final AtomicInteger  my_current_id = new AtomicInteger(-1);
 	int            store_size;
 	KeyValueStore  store;
 	MainLoop       main_loop;
@@ -29,13 +30,11 @@ public class DadkvsServerState {
 	List<ManagedChannel> followerChannels;  // Channels to communicate with follower servers
 	int promisedTimestap;
 	int config;
-	AtomicInteger current_leader_id = new AtomicInteger(-1);
+	final AtomicInteger current_leader_id = new AtomicInteger(-1);
 	boolean leader_alive;  // Track whether the leader is alive
 	long last_heartbeat;  // Track the last heartbeat from the leader
 	private final Object electionLock = new Object(); 
-	AtomicBoolean isInElection = new AtomicBoolean();
-
-	PaxosManager paxosManager;
+	final AtomicBoolean isInElection = new AtomicBoolean();
 
 	DadkvsMainServiceImpl mainServiceImpl = null;
 	DadkvsPaxosServiceImpl paxosServiceImpl = null;
@@ -55,12 +54,12 @@ public class DadkvsServerState {
 	 * @param myself  Server's ID
 	 * @param leader  Indicates whether this server starts as the leader
 	 */
-	public DadkvsServerState(int kv_size, int port, int myself, boolean leader,
-			PaxosManager paxosManager1) {
+	public DadkvsServerState(int kv_size, int port, int myself, boolean leader) {
 
 	server = null;
 	base_port = port;
 	my_id = myself;
+	my_current_id.set(my_id);
 	i_am_leader.set(leader);
 	isInElection.set(false);
 	current_leader_id.set(leader ? myself : -1);
@@ -75,9 +74,8 @@ public class DadkvsServerState {
 	main_loop_worker.start();
 	promisedTimestap = -1;
 	config = 0;
-	this.paxosManager = paxosManager1;
 
-	n_servers = 5;
+	n_servers = DadkvsServer.TOTAL_SERVERS;
 
 	// Initialize the gRPC channels for the followers if this server is the leader
 	if (i_am_leader.get()) {
@@ -89,7 +87,7 @@ public class DadkvsServerState {
 			System.out.println("[new DadkvsServerState]: something went wrong");
 		}
 		startHeartbeat();
-		paxosManager.startCommitThread();
+		// paxosManager.startCommitThread();
 	} else {
 		monitorLeader();
 	}
@@ -221,7 +219,7 @@ public class DadkvsServerState {
 				current_leader_id.set(leaderId);
 				reinitializeFollowerChannels();  // Reinitialize channels for the new leader
 				startHeartbeat();  // Start sending heartbeats as the new leader
-				paxosManager.startCommitThread();
+				// paxosManager.startCommitThread();
 			} else if(leaderId > current_leader_id_int && i_am_leader_bool) {
 				current_leader_id.set(leaderId);
 				this.i_am_leader.set(false);
@@ -271,11 +269,12 @@ public class DadkvsServerState {
 		
 		if (isMyId(current_leader)) {
 			System.out.println("I'm the new leader");
+			my_current_id.set(current_leader);
 			i_am_leader.set(true);
 			current_leader_id.set(current_leader);
 			reinitializeFollowerChannels();  // Reinitialize channels for the new leader
 			startHeartbeat();  // Start sending heartbeats as the new leader
-			paxosManager.startCommitThread();
+			// paxosManager.startCommitThread();
 		} else {
 			current_leader_id.set(old_current_leader + 1);
 			i_am_leader.set(false);

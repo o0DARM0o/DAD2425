@@ -2,27 +2,31 @@
 package dadkvs.server;
 
 
+import java.util.Map.Entry;
+
 import dadkvs.DadkvsPaxos;
+import dadkvs.DadkvsPaxos.LearnReply;
+import dadkvs.DadkvsPaxos.PhaseOneReply;
+import dadkvs.DadkvsPaxos.PhaseTwoReply;
 import dadkvs.DadkvsPaxosServiceGrpc;
 import dadkvs.util.DebugMode;
 import io.grpc.stub.StreamObserver;
 
 public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosServiceImplBase {
 
-    DadkvsServerState server_state;
-    PaxosManager paxosManager;
-    
-	private final Object freezeLock = new Object(); // Lock object for freeze/unfreeze mechanism
-    private final Object lock = new Object();  // Global lock object for Paxos instance synchronization
-
-    
-    public DadkvsPaxosServiceImpl(DadkvsServerState state, PaxosManager paxosManager) {
-        this.server_state = state;
-		this.server_state.paxosServiceImpl = this;
-        this.paxosManager = paxosManager;
+	DadkvsServerState server_state;
+	final PaxosManager paxosManager;
 	
-    }
-    
+	private final Object freezeLock = new Object(); // Lock object for freeze/unfreeze mechanism
+
+	
+	public DadkvsPaxosServiceImpl(DadkvsServerState state, PaxosManager paxosManager) {
+		this.server_state = state;
+		this.server_state.paxosServiceImpl = this;
+		this.paxosManager = paxosManager;
+	
+	}
+	
 	private void checkFreeze() {
 		synchronized (freezeLock) {
 			while (server_state.new_debug_mode == DebugMode.FREEZE) {
@@ -34,7 +38,7 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
 				}
 			}
 		}
-    }
+	}
 
 	private void unfreeze() {
 		synchronized (freezeLock) {
@@ -43,121 +47,64 @@ public class DadkvsPaxosServiceImpl extends DadkvsPaxosServiceGrpc.DadkvsPaxosSe
 		}
 	}
 
-    @Override
-public void phaseone(DadkvsPaxos.PhaseOneRequest request, StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
-	checkFreeze(); // Check if server is frozen before processing the request
-    synchronized (lock) {
+	@Override
+	public void phaseone(DadkvsPaxos.PhaseOneRequest request,
+			StreamObserver<DadkvsPaxos.PhaseOneReply> responseObserver) {
 
-        System.out.println("Receive phase1 request: " + request);
+		checkFreeze(); // Check if server is frozen before processing the request
 
-        int proposedTimestamp = request.getPhase1Timestamp();  
-        int promisedTimestamp = server_state.promisedTimestap;  // Highest promised proposal number
-        int acceptedProposalNumber = server_state.acceptedProposalTimestamp; // Highest accepted proposal number
-        int acceptedValue = server_state.acceptedValue; // Value of highest accepted proposal
+		final PhaseOneReply response = paxosManager.getPhaseOneReply(request);
+		responseObserver.onNext(response);
+		responseObserver.onCompleted();
+	}
 
-        DadkvsPaxos.PhaseOneReply.Builder response = DadkvsPaxos.PhaseOneReply.newBuilder()
-            .setPhase1Config(request.getPhase1Config())
-            .setPhase1Index(proposedTimestamp);
 
-        if (proposedTimestamp > promisedTimestamp) {
-            // Update promisedIndex
-            server_state.promisedTimestap = proposedTimestamp;
-            paxosManager.getPaxosInstance(request.getPhase1Index()).setProposalTimestamp(proposedTimestamp);
+	@Override
+	public void phasetwo(DadkvsPaxos.PhaseTwoRequest request,
+			StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
 
-            response.setPhase1Accepted(true);
+		checkFreeze(); // Check if server is frozen before processing the request
 
-            if (acceptedProposalNumber != -1) {
-                // Include highest accepted proposal number and value
-                response.setPhase1Timestamp(acceptedProposalNumber)
-                        .setPhase1Value(acceptedValue);
-            }
+		final Entry<PhaseTwoReply, PaxosValue> responseTuple =
+				paxosManager.getPhaseTwoReply(request);
 
-            System.out.println("Follower accepted Phase 1 for index: " + proposedTimestamp);
-        } else {
-            response.setPhase1Accepted(false);
-        }
-
-        responseObserver.onNext(response.build());
-        responseObserver.onCompleted();
-    }
-}
+		if (responseTuple.getKey().getPhase2Accepted()) {
+			paxosManager.sendLearnRequests(responseTuple.getValue());
+		}
+		responseObserver.onNext(responseTuple.getKey());
+		responseObserver.onCompleted();
+	}
 
 
 @Override
-public void phasetwo(DadkvsPaxos.PhaseTwoRequest request, StreamObserver<DadkvsPaxos.PhaseTwoReply> responseObserver) {
+public void learn(DadkvsPaxos.LearnRequest request,
+		StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
+
 	checkFreeze(); // Check if server is frozen before processing the request
 	
-    synchronized (lock) {
-
-        // for debug purposes
-        System.out.println("Receive phase two request: " + request);
-        int proposedTimestamp = request.getPhase2Timestamp(); // Proposal number n
-        int value = request.getPhase2Value();
-        int promisedTimestamp = server_state.promisedTimestap;
-
-        DadkvsPaxos.PhaseTwoReply.Builder response = DadkvsPaxos.PhaseTwoReply.newBuilder()
-            .setPhase2Config(request.getPhase2Config())
-            .setPhase2Index(proposedTimestamp);
-
-        if (proposedTimestamp == promisedTimestamp) {
-            // Accept the proposal
-            server_state.acceptedProposalTimestamp = proposedTimestamp;
-            server_state.acceptedValue = value;
-
-            paxosManager.getPaxosInstance(request.getPhase2Index()).setAcceptedTimestamp(promisedTimestamp);
-            paxosManager.getPaxosInstance(request.getPhase2Index()).setAcceptedValue(value);
-
-            response.setPhase2Accepted(true);
-            System.out.println("Follower accepted Phase 2 for index: " + proposedTimestamp);
-
-        } else {
-            response.setPhase2Accepted(false);
-        }
-
-        responseObserver.onNext(response.build());
-        responseObserver.onCompleted();
-    }
+	final LearnReply response = paxosManager.getLearnReply(request);
+	responseObserver.onNext(response);
+	responseObserver.onCompleted();
 }
 
 
-@Override
-public void learn(DadkvsPaxos.LearnRequest request, StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
-	checkFreeze(); // Check if server is frozen before processing the request
-	System.out.println("Receive learn request: " + request);
-    int learnedTimestamp = request.getLearntimestamp();
-    int value = request.getLearnvalue();
+	// Handle heartbeat request from leader
+	@Override
+	public void heartbeat(DadkvsPaxos.HeartbeatRequest request,
+			StreamObserver<DadkvsPaxos.HeartbeatReply> responseObserver) {
 
-    // Update the accepted value
-    server_state.acceptedProposalTimestamp = learnedTimestamp;
-    server_state.acceptedValue = value;
-    paxosManager.getPaxosInstance(request.getLearnindex()).setAcceptedTimestamp(learnedTimestamp);
-    paxosManager.getPaxosInstance(request.getLearnindex()).setAcceptedValue(value);
-    paxosManager.getPaxosInstance(request.getLearnindex()).setReadyToCommit(true);
-
-    DadkvsPaxos.LearnReply response = DadkvsPaxos.LearnReply.newBuilder()
-        .setLearnconfig(request.getLearnconfig())
-        .setLearnindex(learnedTimestamp)
-        .setLearnaccepted(true)
-        .build();
-
-    responseObserver.onNext(response);
-    responseObserver.onCompleted();
-}
-
-
-    // Handle heartbeat request from leader
-    @Override
-    public void heartbeat(DadkvsPaxos.HeartbeatRequest request, StreamObserver<DadkvsPaxos.HeartbeatReply> responseObserver) {
-        checkFreeze(); // Check if server is frozen before processing the request
+		checkFreeze(); // Check if server is frozen before processing the request
 
 		int leaderId = request.getLeaderId();
-       // System.out.println("Received heartbeat from leader: " + leaderId);
-        this.server_state.handleHeartbeat(leaderId);  // Update the server state with the received heartbeat
+		// Update the server state with the received heartbeat
+		this.server_state.handleHeartbeat(leaderId);
 
-        DadkvsPaxos.HeartbeatReply reply = DadkvsPaxos.HeartbeatReply.newBuilder().setAck(true).build();
-        responseObserver.onNext(reply);
-        responseObserver.onCompleted();
-    }
+		DadkvsPaxos.HeartbeatReply reply = 
+				DadkvsPaxos.HeartbeatReply.newBuilder().setAck(true).build();
+
+		responseObserver.onNext(reply);
+		responseObserver.onCompleted();
+	}
 
 	public void executeDebugMode(DebugMode debugMode) {
 		if (debugMode == DebugMode.UN_FREEZE) {
