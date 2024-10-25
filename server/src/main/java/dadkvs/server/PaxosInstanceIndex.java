@@ -19,14 +19,16 @@ public class PaxosInstanceIndex {
 	}
 
 	synchronized void setIfHigherPaxosInstanceIndex(int new_paxos_instance_index) {
-		int current_paxos_instance_index = get();
-		if (current_paxos_instance_index < 0) {
-			current_paxos_instance_index = 0;
-		}
+		int current_paxos_instance_index = paxosInstanceIndex.get();
+
 		if (current_paxos_instance_index < new_paxos_instance_index) {
+			if (current_paxos_instance_index < 0) {
+				current_paxos_instance_index = 0;
+			}
 			for (int i = current_paxos_instance_index; i <= new_paxos_instance_index; i++) {
 				replicaPaxosManagers.putIfAbsent(i, new ReplicaPaxosManager());
 			}
+			paxosInstanceIndex.set(new_paxos_instance_index);
 		}
 	}
 	

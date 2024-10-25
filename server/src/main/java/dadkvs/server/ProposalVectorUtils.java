@@ -4,6 +4,7 @@ import dadkvs.DadkvsPaxos;
 import dadkvs.DadkvsPaxos.ProposalVector;
 
 public class ProposalVectorUtils {
+	private static final ProposalVector placeholder = createProposalVector(-1, -1, -1);
 
 	private ProposalVectorUtils() {
 		// Can't create instances
@@ -111,5 +112,27 @@ public class ProposalVectorUtils {
 		}
 	
 		return proposal2;
+	}
+
+	static ProposalVector getOrPlaceholder(ProposalVector proposalVector) {
+		if (proposalVector == null) {
+			return placeholder;
+		}
+		return proposalVector;
+	}
+
+	static boolean isPlaceholder(ProposalVector proposalVector) {
+		if (proposalVector == null) {
+			return true;
+		}
+		return areProposalsEqual(proposalVector, placeholder);
+	}
+
+	static String proposalToString(ProposalVector proposalVector) {
+		return String.format("<%d, %d, %d>",
+				proposalVector.getProposerId(),
+				proposalVector.getPaxosIndex(),
+				proposalVector.getProposerId()
+		);
 	}
 }

@@ -9,11 +9,11 @@ import dadkvs.DadkvsPaxos.PhaseOneRequest;
 import dadkvs.DadkvsPaxos.PhaseTwoReply;
 import dadkvs.DadkvsPaxos.PhaseTwoRequest;
 import dadkvs.DadkvsPaxos.ProposalVector;
-import dadkvs.DadkvsPaxos.TransactionRecord;
 
 public class ReplicaPaxosManager {
 
-	private ProposalVector highestProposalVector = null;
+	private ProposalVector prepareHighestProposalVector = null;
+	private ProposalVector promisedHighestProposalVector = null;
 	private PaxosValue mostRecentPaxosValue = null;
 
 	ReplicaPaxosManager() {
@@ -22,43 +22,47 @@ public class ReplicaPaxosManager {
 
 	synchronized PhaseOneReply getPrepareRequestReply(PhaseOneRequest prepareRequest) {
 		final ProposalVector new_proposal_vector = prepareRequest.getProposalVector();
-		if (ProposalVectorUtils.areProposalsEqual(highestProposalVector, new_proposal_vector)) {
+		if (ProposalVectorUtils.areProposalsEqual(prepareHighestProposalVector, new_proposal_vector)) {
 			System.err.println("[getPrepareRequestReply]: Expected different proposal vectors");
 			return createPrepareRequestReply(true);
 		}
-		if (ProposalVectorUtils.isProposalHigherThan(highestProposalVector, new_proposal_vector)) {
+		if (ProposalVectorUtils.isProposalHigherThan(prepareHighestProposalVector, new_proposal_vector)) {
 			return createPrepareRequestReply(false);
 		}
-		highestProposalVector = new_proposal_vector;
+		prepareHighestProposalVector = new_proposal_vector;
 		return createPrepareRequestReply(true);
 	}
 
 	private PhaseOneReply createPrepareRequestReply(boolean was_promised) {
 		if (mostRecentPaxosValue == null) {
+	
 			return DadkvsPaxos.PhaseOneReply.newBuilder()
 					.setPhase1Config(-1) // Not Implemented
-					.setHighestProposalVector((ProposalVector)null)
+					.setHighestProposalVector(ProposalVectorUtils.getOrPlaceholder(null))
 					.setPhase1Accepted(was_promised)
-					.setPhase1Value((TransactionRecord)null)
+					.setPhase1Value(TransactionRecordUtils.getOrPlaceholder(null))
 					.build();
 		}
 		return DadkvsPaxos.PhaseOneReply.newBuilder()
 				.setPhase1Config(-1) // Not Implemented
-				.setHighestProposalVector(mostRecentPaxosValue.proposal_vector)
+				.setHighestProposalVector(ProposalVectorUtils.getOrPlaceholder(
+						mostRecentPaxosValue.proposal_vector))
 				.setPhase1Accepted(was_promised)
-				.setPhase1Value(mostRecentPaxosValue.tr)
+				.setPhase1Value(TransactionRecordUtils.getOrPlaceholder(mostRecentPaxosValue.tr))
 				.build();
 	}
 
 	synchronized Entry<PhaseTwoReply, PaxosValue> getAcceptRequestReply(PhaseTwoRequest acceptRequest) {
 		final ProposalVector new_proposal_vector = acceptRequest.getProposalVector();
-		if (ProposalVectorUtils.areProposalsEqual(highestProposalVector, new_proposal_vector)) {
+		if (ProposalVectorUtils.areProposalsEqual(promisedHighestProposalVector, new_proposal_vector)) {
 			System.err.println("[getAcceptRequestReply]: Expected different proposal vectors");
 			return createAcceptReplyTuple(true);
 		}
-		if (ProposalVectorUtils.isProposalHigherThan(highestProposalVector, new_proposal_vector)) {
+		if (ProposalVectorUtils.isProposalHigherThan(prepareHighestProposalVector, new_proposal_vector)) {
 			return createAcceptReplyTuple(false);
 		}
+
+		promisedHighestProposalVector = new_proposal_vector;
 		mostRecentPaxosValue = new PaxosValue(acceptRequest.getPhase2Value(), new_proposal_vector);
 		return createAcceptReplyTuple(true);
 	}
@@ -78,13 +82,14 @@ public class ReplicaPaxosManager {
 		if (paxosValue == null) {
 			return DadkvsPaxos.PhaseTwoReply.newBuilder()
 					.setPhase2Config(-1) // Not Implemented
-					.setAcceptedProposalVector((ProposalVector)null)
+					.setAcceptedProposalVector(ProposalVectorUtils.getOrPlaceholder(null))
 					.setPhase2Accepted(was_accepted)
 					.build();
 		}
 		return DadkvsPaxos.PhaseTwoReply.newBuilder()
 				.setPhase2Config(-1) // Not Implemented
-				.setAcceptedProposalVector(paxosValue.proposal_vector)
+				.setAcceptedProposalVector(ProposalVectorUtils.getOrPlaceholder(
+						paxosValue.proposal_vector))
 				.setPhase2Accepted(was_accepted)
 				.build();
 	}

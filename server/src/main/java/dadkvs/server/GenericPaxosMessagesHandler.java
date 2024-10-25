@@ -116,8 +116,7 @@ public class GenericPaxosMessagesHandler<T, R> {
 
 			@Override
 			public void onError(Throwable t) {
-				System.err.println("[initiateStreamObserver]: Error from some replica channel: " +
-						t.getMessage());
+				// Do nothing
 			}
 
 			@Override

@@ -1,13 +1,13 @@
 package dadkvs.util;
 
-import java.util.ArrayList;
+import java.util.List;
 
 public class GenericResponseCollector<T>  {
-    ArrayList<T> collectedResponses;
+    List<T> collectedResponses;
     int   received;
     int   pending;
 
-    public GenericResponseCollector(ArrayList<T> responses, int maxresponses) {
+    public GenericResponseCollector(List<T> responses, int maxresponses) {
         collectedResponses = responses;
 	received = 0;
 	pending = maxresponses;

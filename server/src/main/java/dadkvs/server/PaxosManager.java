@@ -21,6 +21,7 @@ public class PaxosManager {
 	final private ManagedChannel[] channels;
 
 	final private PaxosInstanceIndex paxosInstanceIndex;
+	final private AtomicInteger lastLearnedPaxosInstanceIndex;
 	final private AtomicInteger my_current_id;
 
 	final private PaxosValueCollector paxosValueCollector;
@@ -41,6 +42,7 @@ public class PaxosManager {
 		this.paxosInstanceIndex = new PaxosInstanceIndex(new AtomicInteger(-1),
 				replicaPaxosManagers);
 
+		this.lastLearnedPaxosInstanceIndex = new AtomicInteger(-1);
 		this.my_current_id = serverState.my_current_id;
 		this.paxosValueCollector = new PaxosValueCollector(serverState);
 	}
@@ -111,12 +113,24 @@ public class PaxosManager {
 
 	public PhaseOneReply getPhaseOneReply(PhaseOneRequest prepareRequest) {
 		final int new_instance_index = prepareRequest.getProposalVector().getPaxosIndex();
+
+		System.out.println("Proposal Vector " +
+				ProposalVectorUtils.proposalToString(prepareRequest.getProposalVector()) +
+				"; Replica received prepareRequest"
+		);
+
 		paxosInstanceIndex.setIfHigherPaxosInstanceIndex(new_instance_index);
 		return replicaPaxosManagers.get(new_instance_index).getPrepareRequestReply(prepareRequest);
 	}
 
 	public Entry<PhaseTwoReply, PaxosValue> getPhaseTwoReply(PhaseTwoRequest acceptRequest) {
 		final int new_instance_index = acceptRequest.getProposalVector().getPaxosIndex();
+
+		System.out.println("Proposal Vector " +
+			ProposalVectorUtils.proposalToString(acceptRequest.getProposalVector()) +
+			"; Replica received acceptRequest"
+		);
+
 		paxosInstanceIndex.setIfHigherPaxosInstanceIndex(new_instance_index);
 		return replicaPaxosManagers.get(new_instance_index).getAcceptRequestReply(acceptRequest);
 	}
@@ -124,6 +138,11 @@ public class PaxosManager {
 	public LearnReply getLearnReply(LearnRequest learnRequest) {
 		final PaxosValue new_paxos_value = new PaxosValue(
 				learnRequest.getLearnvalue(), learnRequest.getProposalVector());
+
+		System.out.println("Proposal Vector " +
+			ProposalVectorUtils.proposalToString(learnRequest.getProposalVector()) +
+			"; Replica received learnRequest"
+		);
 
 		final int new_paxos_instance_index = new_paxos_value.proposal_vector.getPaxosIndex();
 		paxosInstanceIndex.setIfHigherPaxosInstanceIndex(new_paxos_instance_index);
@@ -134,15 +153,16 @@ public class PaxosManager {
 	private void updateLearnRequests(PaxosValue new_paxos_value) {
 		synchronized (updateLearnRequestsLock) {
 			final int new_paxos_instance_index = new_paxos_value.proposal_vector.getPaxosIndex();
-			int current_paxos_instance_index = paxosInstanceIndex.get();
-			if (current_paxos_instance_index < 0) {
-				current_paxos_instance_index = 0;
-			}
-			if (current_paxos_instance_index < new_paxos_instance_index) {
-				for (int i = current_paxos_instance_index; i <= new_paxos_instance_index; i++) {
+			int last_learned_paxos_instance_index = lastLearnedPaxosInstanceIndex.get();
+			if (last_learned_paxos_instance_index < new_paxos_instance_index) {
+				if (last_learned_paxos_instance_index < 0) {
+					last_learned_paxos_instance_index = 0;
+				}
+				for (int i = last_learned_paxos_instance_index; i <= new_paxos_instance_index; i++) {
 					learnPaxosManagers.putIfAbsent(i, new LearnPaxosManager(
 							paxosValueCollector, new_paxos_value));
 				}
+				lastLearnedPaxosInstanceIndex.set(new_paxos_instance_index);
 			}
 		}
 	}
@@ -151,7 +171,6 @@ public class PaxosManager {
 		final int new_paxos_instance_index = new_paxos_value.proposal_vector.getPaxosIndex();
 		paxosInstanceIndex.setIfHigherPaxosInstanceIndex(new_paxos_instance_index);
 		updateLearnRequests(new_paxos_value);
-
 		Thread thread = new Thread(() ->
 				learnPaxosManagers.get(new_paxos_instance_index).sendLearnRequests(channels));
 		thread.start();

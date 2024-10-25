@@ -8,6 +8,15 @@ import dadkvs.DadkvsPaxos;
 import dadkvs.DadkvsPaxos.TransactionRecord;
 
 public class TransactionRecordUtils {
+	private static final TransactionRecord placeholder = DadkvsPaxos.TransactionRecord.newBuilder()
+			.setRead1Key(-1)
+			.setRead1Version(-1)
+			.setRead2Key(-1)
+			.setRead2Version(-1)
+			.setWriteKey(-1)
+			.setWriteValue(-1)
+			.setReqId(-1)
+			.build();
 
 	private TransactionRecordUtils() {
 		// Can't create instances
@@ -45,5 +54,19 @@ public class TransactionRecordUtils {
 				tr1.getWriteKey() == tr2.getWriteKey() &&
 				tr1.getWriteValue() == tr2.getWriteValue() &&
 				tr1.getReqId() == tr2.getReqId();
+	}
+
+	static TransactionRecord getOrPlaceholder(TransactionRecord transactionRecord) {
+		if (transactionRecord == null) {
+			return placeholder;
+		}
+		return transactionRecord;
+	}
+
+	static boolean isPlaceholder(TransactionRecord transactionRecord) {
+		if (transactionRecord == null) {
+			return true;
+		}
+		return areTransactionsEqual(transactionRecord, placeholder);
 	}
 }

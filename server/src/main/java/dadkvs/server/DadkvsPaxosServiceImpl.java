@@ -81,7 +81,7 @@ public void learn(DadkvsPaxos.LearnRequest request,
 		StreamObserver<DadkvsPaxos.LearnReply> responseObserver) {
 
 	checkFreeze(); // Check if server is frozen before processing the request
-	
+		
 	final LearnReply response = paxosManager.getLearnReply(request);
 	responseObserver.onNext(response);
 	responseObserver.onCompleted();

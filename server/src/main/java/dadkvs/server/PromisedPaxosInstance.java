@@ -82,12 +82,17 @@ public class PromisedPaxosInstance extends PaxosInstance {
 
 		PaxosValue mostRecentProposedPaxosValue = null;
 		for (PhaseOneReply phaseOneReply : phaseOneReplies) {
-			final PaxosValue potentialProposedValue = new PaxosValue(
-				phaseOneReply.getPhase1Value(),
-				phaseOneReply.getHighestProposalVector()
-			);
+			PaxosValue potentialProposedValue = null;
+			if (!ProposalVectorUtils.isPlaceholder(phaseOneReply.getHighestProposalVector())) {
+				new PaxosValue(
+					phaseOneReply.getPhase1Value(),
+					phaseOneReply.getHighestProposalVector()
+				);
+			}
 
-			final boolean otherValueProposed = potentialProposedValue.tr != null;
+			final boolean otherValueProposed = potentialProposedValue != null &&
+					potentialProposedValue.tr != null;
+
 			if (otherValueProposed) {
 				mostRecentProposedPaxosValue = PaxosValue.getMoreRecentValue(
 						mostRecentProposedPaxosValue,
@@ -112,7 +117,7 @@ public class PromisedPaxosInstance extends PaxosInstance {
 			case MessageResultEnum.TIMED_OUT:
 				return new PromisedPaxosInstance(this);
 			default:
-				System.out.println("[sendPrepareRequests]: Something went wrong");
+				System.err.println("[sendPrepareRequests]: Something went wrong");
 				return new RejectedPaxosInstance(this);
 		}
 	}

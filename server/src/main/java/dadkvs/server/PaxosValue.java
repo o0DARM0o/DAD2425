@@ -70,4 +70,43 @@ public class PaxosValue {
 	public int hashCode() {
 		return Objects.hash(tr, proposal_vector);
 	}
+
+	@Override
+	public String toString() {
+		final StringBuilder stringBuilder = new StringBuilder();
+		stringBuilder.append("PaxosValue[");
+		if (this.proposal_vector == null) {
+			stringBuilder.append(' ');
+		} else {
+			stringBuilder.append(this.proposal_vector.getProposerId());
+			stringBuilder.append(' ');
+			stringBuilder.append(this.proposal_vector.getPaxosIndex());
+			stringBuilder.append(' ');
+			stringBuilder.append(this.proposal_vector.getProposalNumber());
+		}
+
+		stringBuilder.append('|');
+
+		if (this.tr == null) {
+			stringBuilder.append(' ');
+		} else {
+			stringBuilder.append(this.tr.getRead1Key());
+			stringBuilder.append(' ');
+			stringBuilder.append(this.tr.getRead1Version());
+			stringBuilder.append(", ");
+			stringBuilder.append(this.tr.getRead2Key());
+			stringBuilder.append(' ');
+			stringBuilder.append(this.tr.getRead2Version());
+			stringBuilder.append(", ");
+			stringBuilder.append(this.tr.getWriteKey());
+			stringBuilder.append(' ');
+			stringBuilder.append(this.tr.getWriteValue());
+			stringBuilder.append(", ");
+			stringBuilder.append(this.tr.getReqId());
+		}
+
+		stringBuilder.append(']');
+
+		return stringBuilder.toString();
+	}
 }

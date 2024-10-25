@@ -19,6 +19,9 @@ import io.grpc.ManagedChannelBuilder;
 
 import dadkvs.server.VersionedValue;
 
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.List;
+
 
 public class DadkvsClient {
 
@@ -106,7 +109,7 @@ public class DadkvsClient {
 	int reqid = sequence_number*100 + client_id;
 	
 	DadkvsMain.ReadRequest.Builder read_request  = DadkvsMain.ReadRequest.newBuilder();;
-	ArrayList<DadkvsMain.ReadReply> read_responses = new ArrayList<DadkvsMain.ReadReply>();; 
+	List<DadkvsMain.ReadReply> read_responses = new CopyOnWriteArrayList<DadkvsMain.ReadReply>(); 
 	GenericResponseCollector<DadkvsMain.ReadReply> read_collector = new GenericResponseCollector<DadkvsMain.ReadReply>(read_responses, n_servers);;
     
 	read_request.setReqid(reqid).setKey(key);
@@ -115,18 +118,18 @@ public class DadkvsClient {
 	    async_stubs[i].read(read_request.build(), read_observer);
 	}
 	read_collector.waitForTarget(responses_needed);
-	if (read_responses.size() >= responses_needed) {
-	    Iterator<DadkvsMain.ReadReply> read_iterator = read_responses.iterator();
-	    DadkvsMain.ReadReply read_reply = read_iterator.next();
-	    System.out.println("Reqid = " + reqid + " id in reply = " + read_reply.getReqid());
-	    System.out.println("read key " + read_request.getKey() + " = <" + read_reply.getValue() + "," + read_reply.getTimestamp() + ">");
-	    VersionedValue kv_entry = new VersionedValue (read_reply.getValue(), read_reply.getTimestamp());;
-	    return kv_entry;
-	}
-	else {
-	    System.out.println("error reading");
-	    return null;
-	}
+		if (read_responses.size() >= responses_needed) {
+			Iterator<DadkvsMain.ReadReply> read_iterator = read_responses.iterator();
+			DadkvsMain.ReadReply read_reply = read_iterator.next();
+			System.out.println("Reqid = " + reqid + " id in reply = " + read_reply.getReqid());
+			System.out.println("read key " + read_request.getKey() + " = <" + read_reply.getValue() + "," + read_reply.getTimestamp() + ">");
+			VersionedValue kv_entry = new VersionedValue (read_reply.getValue(), read_reply.getTimestamp());;
+			return kv_entry;
+		}
+		else {
+			System.out.println("error reading");
+			return null;
+		}
     }
 
     

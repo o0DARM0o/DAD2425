@@ -27,14 +27,43 @@ public class PaxosValueCollector  {
 			return;
 		}
 		final int paxos_index = new_paxos_value.proposal_vector.getPaxosIndex(); 
-		if (collectedPaxosValues.put(paxos_index, new_paxos_value) != null) {
+		if (collectedPaxosValues.putIfAbsent(paxos_index, new_paxos_value) != null) {
 			System.err.println(
 					"[addPaxosValue]: Expected no paxos value entry with key " + paxos_index);
 		}
-		if (locks.put(paxos_index, new Object()) != null) {
+		if (locks.putIfAbsent(paxos_index, new Object()) != null) {
 			System.err.println("[addPaxosValue]: Expected no lock entry with key " + paxos_index);
 		}
+		System.out.println(paxosValueCollectorToString());
 		notify();
+	}
+
+	private String paxosValueCollectorToString() {
+		if (collectedPaxosValues == null || collectedPaxosValues.isEmpty()) {
+			return "CollectedPaxosValues{}";
+		}
+		// Find the maximum key in the map to determine the range to iterate
+		final int maxKey = collectedPaxosValues
+				.keySet().stream().max(Integer::compareTo).orElse(0);
+
+		final StringBuilder stringBuilder = new StringBuilder();
+
+		stringBuilder.append("CollectedPaxosValues{\n");
+		for (int i = 0; i <= maxKey; i++) {
+			stringBuilder.append('\t');
+			if (collectedPaxosValues.containsKey(i)) {
+				stringBuilder.append(collectedPaxosValues.get(i));
+			} else {
+				stringBuilder.append("<empty>");
+			}
+			if (i < maxKey) {  // Add a separator between values
+				stringBuilder.append(',');
+			}
+			stringBuilder.append('\n');
+		}
+		stringBuilder.append('}');
+
+		return stringBuilder.toString();
 	}
 
 	synchronized public void handleTransactions() {
@@ -47,7 +76,10 @@ public class PaxosValueCollector  {
 						keyValueStore.commit(collectedPaxosValues.get(paxos_index).tr);
 
 				wasPaxosSuccessful.put(paxos_index, was_transaction_successful);
-				locks.get(paxos_index).notify();
+
+				synchronized (locks.get(paxos_index)) {
+					locks.get(paxos_index).notify();
+				}
 
 				paxos_index = next_paxos_index.incrementAndGet();
 			}
@@ -65,7 +97,9 @@ public class PaxosValueCollector  {
 			return wasPaxosSuccessful.get(paxos_index);
 		}
 		try {
-			locks.get(paxos_index).wait();
+			synchronized (locks.get(paxos_index)) {
+				locks.get(paxos_index).wait();
+			}
 			if (wasPaxosSuccessful.containsKey(paxos_index)) {
 				return wasPaxosSuccessful.get(paxos_index);
 			}

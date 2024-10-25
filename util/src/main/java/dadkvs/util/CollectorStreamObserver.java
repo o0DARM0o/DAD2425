@@ -24,11 +24,10 @@ public class CollectorStreamObserver<T> implements StreamObserver<T> {
     @Override
     public void onError(Throwable t) {
         // Handle error
-        System.err.println("Error occurred: " + t.getMessage());
-	if (done == false) {
-	    collector.addNoResponse();
-	    done = true;
-	}
+		if (done == false) {
+			collector.addNoResponse();
+			done = true;
+		}
     }
 
     @Override
